@@ -1,0 +1,53 @@
+K 25
+svn:wc:ra_dav:version-url
+V 44
+/svn/odtame-odt/!svn/ver/165/trunk/odt/build
+END
+doDoxy.sh
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/svn/odtame-odt/!svn/ver/101/trunk/odt/build/doDoxy.sh
+END
+make.MPI
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/odtame-odt/!svn/ver/160/trunk/odt/build/make.MPI
+END
+Doxyfile
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/odtame-odt/!svn/ver/101/trunk/odt/build/Doxyfile
+END
+make.MYWORKSTATION
+K 25
+svn:wc:ra_dav:version-url
+V 63
+/svn/odtame-odt/!svn/ver/165/trunk/odt/build/make.MYWORKSTATION
+END
+make.MAC
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/odtame-odt/!svn/ver/163/trunk/odt/build/make.MAC
+END
+Makefile
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/odtame-odt/!svn/ver/165/trunk/odt/build/Makefile
+END
+README
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/svn/odtame-odt/!svn/ver/120/trunk/odt/build/README
+END
+makePdfManual.sh
+K 25
+svn:wc:ra_dav:version-url
+V 60
+/svn/odtame-odt/!svn/ver/22/trunk/odt/build/makePdfManual.sh
+END

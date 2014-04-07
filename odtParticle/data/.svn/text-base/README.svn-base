@@ -1,0 +1,10 @@
+
+File plot_odt.gnu is used with gnuplot as load 'plot.gnu', then hit enter to cycle through.
+In odtParam.inp, set modDump to the frequency to output files after eddies occur.
+
+File plotmeans.gnu likewise.
+
+clear.sh will delete the data files (careful)
+
+for parallel jobs each process dumps to data_myid (data_0, data_1 ...)
+

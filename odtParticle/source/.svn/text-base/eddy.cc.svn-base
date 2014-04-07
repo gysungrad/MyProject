@@ -1,0 +1,1106 @@
+/**
+ * @file eddy.cc
+ * Source file for class eddy
+ */
+
+#include "eddy.h"
+#include "odtParam.h"
+#include <cmath>   
+#include <iomanip>   
+#include <stdexcept>
+#include <algorithm>
+
+using namespace std;
+
+///////////////////////////////////////////////////////////////////////////////
+
+/** Default constructor function. */
+eddy::eddy() { 
+
+    leftEdge = 0.0;
+    rightEdge = 1.0;
+    invTauEddy = 1.0;
+    cCoef = vector<double> (3,0.0); 
+    bCoef = vector<double> (3,0.0); 
+    LperiodicEddy = false;
+    K = vector<double> (1,0.0); //AKeddy arbitrary initialization
+
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+/** Copy constructor function  .
+ *
+ *  @param ed \input eddy object to copy.
+ */
+eddy::eddy(const eddy &ed) {
+
+    leftEdge      = ed.leftEdge;
+    rightEdge     = ed.rightEdge;
+    eddySize      = ed.eddySize;
+    Pa            = ed.Pa;
+    invTauEddy    = ed.invTauEddy;
+    cCoef         = ed.cCoef;
+    bCoef         = ed.bCoef;
+    LperiodicEddy = ed.LperiodicEddy;
+    K = vector<double> (1,0.0); //AKeddy arbitrary initialization
+
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+/** Sample an eddy size from the eddy size distribution.
+ * This could be as simple as a tophat, but this function is
+ * more accurate, hence more efficient.
+ * 
+ * @param odtP \input parameters object.
+ * @param rr   \input random number generator object.
+ */
+void eddy::sampleEddySize(const odtParam &odtP, randomGenerator &rr) {
+
+    double rndd = 0.0;
+    eddySize = 0.0;
+    
+    // I have added this while-loop due to the problem described in function
+    // eddy::sampleEddyPosition.
+    do
+    {
+        rndd = rr.getRand();
+        if(!odtP.Llem) eddySize = odtP.esdp1 / log( rndd * odtP.esdp2 + odtP.esdp3 );
+        else eddySize = odtP.Lmin * pow(( 1.0 - ( 1.0 - pow((odtP.Lmin/odtP.Lmax), 5./3.)) * rndd ), -0.6);
+    }
+    while (odtP.domainLength-eddySize < 2*odtP.domainLength*odtP.dxmin*0.1);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+/** Uniformly sample the eddy position on the line.  For periodic domains the 
+ * position can be anywhere.  For nonperiodic domains, the position 
+ * is from 0 to the end where end is the domain size - the eddy size 
+ * (since the eddy has to fit in the domain).  This also means that 
+ * the eddy position is the left edge of the eddy.
+ * For periodic domains, rightEdge is greater than leftEdge (even for eddies that 
+ * wrap the domain (since the eddy class is autonomous)), and may be 
+ * outside the range of the base odtline.
+ * 
+ * @param odtP \input parameters object.
+ * @param line \input anyline to sample eddies from.
+ * @param rr   \input random number generator object.
+ */
+void eddy::sampleEddyPosition(const odtParam &odtP, anyline &line, randomGenerator &rr) {
+
+
+    if(!odtP.Lperiodic) {
+        leftEdge  = rr.getRand() * (odtP.domainLength-eddySize);
+        rightEdge = leftEdge + eddySize;
+        // I don't know why, but if one age is equal to a domain boundary, the
+        // code gives an segmentation fault.
+        while (odtP.domainLength-rightEdge < odtP.domainLength*odtP.dxmin*0.1
+                || leftEdge < odtP.domainLength*odtP.dxmin*0.1){
+            leftEdge  = rr.getRand() * (odtP.domainLength-eddySize);
+            rightEdge = leftEdge + eddySize;
+        }
+    }
+    else {
+        LperiodicEddy = false;             // reset the value
+        leftEdge  = rr.getRand() * odtP.domainLength + line.posf[0];
+        rightEdge = leftEdge + eddySize;
+        if(rightEdge > (odtP.domainLength + line.posf[0])) {
+            LperiodicEddy = true;
+        }
+    }
+
+
+}
+///////////////////////////////////////////////////////////////////////////////
+
+/** Eddy acceptance probability is computed after several previous steps. 
+ * 
+ * @param odtP \input parameters object.
+ * @param dtSample \input eddy sample time step.
+ **/
+void eddy::computeEddyAcceptanceProb(const odtParam &odtP, double &dtSample) {
+
+
+    double f, g;
+
+    // f = odtP.esdp4/(eddySize*eddySize) * exp(odtP.esdp1/eddySize);
+    // Pa = dtSample * invTauEddy * odtP.C_param / (eddySize * eddySize * f * g);
+    // note cancellation of eddySize * eddySize
+
+    f = odtP.esdp4 * exp(odtP.esdp1/eddySize);
+    
+    if(!odtP.Lperiodic)
+        g = 1.0/(odtP.domainLength - eddySize);
+    else
+        g = 1.0/odtP.domainLength;
+
+    Pa = dtSample * invTauEddy * odtP.C_param / (f * g);
+
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+/** Apply the triplet map to the eddy.  This is continuous, not discrete.
+ * That is, we take the "exact" profile to be the peicewise constant 
+ * profiles within cells.  The eddy region is copied three times,
+ * Then each copy is compressed by a factor of three, then the middle
+ * copy is inserted as a mirror image:
+ * \vc{
+ * grid 1 :  | {     |     |     |     |     } |       ngrid = 5 (6 faces)
+ *                   a     b     c     d
+ * grid 2 :  | ( | | | | | | | | | | | | | | ) |       ngrid = 15 (16 faces)
+ *               a b c d N d c b a N a b c d           N's line up with ()
+ * }
+ * Note that the cell is not split at the eddy boundary {, }.  However, later
+ * when the eddy is inserted (if accepted), the cell is split there.
+ *
+ * @param anyl input/output: line object to apply triplet map to.
+ * @see anyline::insertEddy
+ */
+ void eddy::tripMap(anyline &anyl) {
+   
+    int    ngrd  = anyl.ngrd;
+    int    ngrd2 = ngrd*2;
+    int    ngrd3 = ngrd*3;
+    double cFac   = 1./3.;
+    int    i, j, k;
+    
+    ///////////// make space for 2nd, 3rd segments
+    
+    anyl.pos.resize(ngrd3);
+    anyl.posf.resize(ngrd3+1);
+    anyl.rho.resize(ngrd3);
+    anyl.molec.resize(ngrd3);
+    anyl.lambda.resize(ngrd3);
+    anyl.phase.resize(ngrd3);
+
+    for(k=0; k<anyl.nprops; k++) 
+        (*anyl.props[k]).resize(ngrd3);
+
+#ifndef COMPSCI
+    ///////////// fill second segment
+
+    for(i=ngrd, j=ngrd-1; i<ngrd2; i++, j--) {
+        anyl.rho[i]  = anyl.rho[j];
+        anyl.molec[i] = anyl.molec[j];
+        anyl.lambda[i] = anyl.lambda[j];
+        anyl.phase[i] = anyl.phase[j];
+        for( k=0; k<anyl.nprops; k++ )
+            (*anyl.props[k])[i] = (*anyl.props[k])[j];
+    }
+    
+    ///////////// fill third segment
+    
+    for(i=ngrd2, j=0; i<ngrd3; i++, j++) {
+        anyl.rho[i]  = anyl.rho[j];
+        anyl.molec[i] = anyl.molec[j];
+        anyl.lambda[i] = anyl.lambda[j];
+        anyl.phase[i] = anyl.phase[j];
+        for( k=0; k<anyl.nprops; k++ )
+            (*anyl.props[k])[i] = (*anyl.props[k])[j];
+    }
+#else
+    //// first alternative
+    //std::copy(&anyl.rho[0], &anyl.rho[ngrd], &anyl.rho[ngrd2]);
+    //std::reverse_copy(&anyl.rho[0], &anyl.rho[ngrd], &anyl.rho[ngrd]);
+    //std::copy(&anyl.molec[0], &anyl.molec[ngrd], &anyl.molec[ngrd2]);
+    //std::reverse_copy(&anyl.molec[0], &anyl.molec[ngrd], &anyl.molec[ngrd]);
+    //std::copy(&anyl.lambda[0], &anyl.lambda[ngrd], &anyl.lambda[ngrd2]);
+    //std::reverse_copy(&anyl.lambda[0], &anyl.lambda[ngrd], &anyl.lambda[ngrd]);
+    //std::copy(&anyl.phase[0], &anyl.phase[ngrd], &anyl.phase[ngrd2]);
+    //std::reverse_copy(&anyl.phase[0], &anyl.phase[ngrd], &anyl.phase[ngrd]);
+    //for( k=0; k<anyl.nprops; k++ ) {
+    //    std::copy(&(*anyl.props[k])[0], &(*anyl.props[k])[ngrd], &(*anyl.props[k])[ngrd2]);
+    //    std::reverse_copy(&(*anyl.props[k])[0], &(*anyl.props[k])[ngrd], &(*anyl.props[k])[ngrd]);
+    //}
+    
+    // second alternative
+    for(int i=0; i<ngrd; i++) { 
+        anyl.rho[2*ngrd+i]      = anyl.rho[i];
+        anyl.rho[2*ngrd-i-1]    = anyl.rho[i]; 
+        anyl.molec[2*ngrd+i]    = anyl.molec[i];
+        anyl.molec[2*ngrd-i-1]  = anyl.molec[i]; 
+        anyl.lambda[2*ngrd+i]   = anyl.lambda[i];
+        anyl.lambda[2*ngrd-i-1] = anyl.lambda[i];
+        anyl.phase[2*ngrd+i]    = anyl.phase[i];
+        anyl.phase[2*ngrd-i-1]  = anyl.phase[i]; 
+    }
+    for(int k=0; k<anyl.nprops; k++ ) {
+        double* vec = &(*anyl.props[k])[0]; 
+        for(int i=0; i<ngrd; i++) { 
+            vec[2*ngrd+i]   = vec[i];
+            vec[2*ngrd-i-1] = vec[i]; 
+        }
+    }
+#endif
+    
+    //////////// write new cell and face positions
+    
+    //--------- cell face positions
+    
+    double newSegSize = (rightEdge-leftEdge)*cFac;
+    
+    anyl.posf[ngrd3] = anyl.posf[ngrd];       // last face doesn't change
+    
+    for(int i=1; i<ngrd; i++)       
+        anyl.posf[i] = leftEdge + (anyl.posf[i]-leftEdge)*cFac;
+    anyl.posf[ngrd] = leftEdge + newSegSize;               
+    
+    for(int i=ngrd+1, j=ngrd-1; i<ngrd2; i++, j--) 
+        anyl.posf[i] = anyl.posf[ngrd] + (anyl.posf[ngrd]-anyl.posf[j]);
+    anyl.posf[ngrd2] = anyl.posf[ngrd] + newSegSize;                
+
+    for(int i=ngrd2+1, j=ngrd2-1; i<ngrd3; i++, j--)
+        anyl.posf[i] = anyl.posf[ngrd2] + (anyl.posf[ngrd2]-anyl.posf[j]);
+
+
+    //--------- cell center positions
+
+    for(int i=0; i<ngrd3; i++)
+        anyl.pos[i] = 0.5*(anyl.posf[i]+anyl.posf[i+1]);
+
+    /////////// update ngrd
+
+    anyl.ngrd  = ngrd3;
+    anyl.ngrdf = anyl.ngrd+1;
+
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+/** Fill velocity kernel K (used also for \fun{J=|K|})
+ *
+ *  @param line \input anyline line object, use for cell positions.
+ */
+
+void eddy::fillKernel(anyline &line) {
+
+    ////////// Fill kernel
+
+    int            i;
+    int            nseg = line.ngrd / 3;
+
+    K.resize(line.ngrd);
+
+    //---------- 1st Segment
+
+    K[0] = 2*leftEdge - (line.posf[1]+leftEdge);                    // 1st cell
+
+    for(i=1; i<nseg; i++)                                           // other cells
+        K[i] = 2.0*(leftEdge - line.pos[i]);
+
+    //---------- Second Segment
+
+    for(i=nseg; i<nseg*2; i++) 
+        K[i] = 4.0*(line.pos[i] - leftEdge) - 2.0*eddySize;
+
+    //---------- Third Segment
+
+    for(i=nseg*2; i<line.ngrd-1; i++)                              // all but last
+        K[i] = 2.0*(eddySize + leftEdge - line.pos[i]);
+
+    int idmb = line.ngrd-1;                                            
+    K[idmb] = 2.0*(eddySize+leftEdge)-(rightEdge+line.posf[idmb]); // last cell
+
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+/** Apply kernels K and J to the velocity profile.
+ * This is called after the kernel coefficients is computed in eddyTau
+ *
+ * @param line \inout odtline object velocities are updated.
+ * @param odtP \input parameters object.
+ */
+void eddy::applyVelocityKernels(odtline &line, const odtParam &odtP) {
+
+    int            i;
+    if(odtP.Llem || odtP.Lspatial) // vanilla odt for spatial formulation
+    return;
+
+    ////////// update velocity profiles
+    
+    if(odtP.LconstProp)
+        for(i=0; i<line.ngrd; i++) {
+            line.uvel[i] += cCoef[0]*K[i];
+            line.vvel[i] += cCoef[1]*K[i];
+            line.wvel[i] += cCoef[2]*K[i];
+        }
+    else 
+        for(i=0; i<line.ngrd; i++) {
+            line.uvel[i] += cCoef[0]*K[i] + bCoef[0]*fabs(K[i]);
+            line.vvel[i] += cCoef[1]*K[i] + bCoef[1]*fabs(K[i]);
+            line.wvel[i] += cCoef[2]*K[i] + bCoef[2]*fabs(K[i]);
+        }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+/** Compute the inverse of the eddy timescale. 
+ *  Used to define the eddy acceptance probability.
+ *  This is the variable property version.  See also eddyTauCP
+ *
+ *  @param line    \input odtline object used to compute eddy timescale.
+ *  @param odtP    \input parameters object.
+ *  @param Z_value \input large eddy suppression parameter.
+ *  @return false for implausible eddy, true for the usual, proper eddy.
+ */
+bool eddy::eddyTau(odtline &line, const odtParam &odtP, double Z_value) {
+
+    if(Z_value <= 0) Z_value = odtP.Z_param; //default is suppression coefficient
+
+    double         KK=0;                                  // equivalent of the 4/27 fac
+    double         rhoK=0, rhoJ=0, rhoKK=0, rhoJK=0;
+    double         uRhoJ[3]={0,0,0}, uRhoK[3]={0,0,0};
+
+    double         P[3];
+    double         Q[3];
+    double         S;
+    double         A;
+    double         eKinEddy;        
+    double         eViscPenalty;
+    double         rhoEddy=0.0, viscEddy=0.0;
+
+    vector<double> dy(line.ngrd);    
+    vector<double> intRhoKi(line.ngrd);
+    vector<double> intRhoJi(line.ngrd); 
+
+    int            i;
+    double         dd;//, dd1, dd2; //  !!!!!  unused variables
+
+    //////////// cell sizes
+
+    dy[0] = line.posf[1]-leftEdge;
+    for(i=1; i<line.ngrd-1; i++)
+        dy[i] = line.posf[i+1]-line.posf[i];
+    dy[line.ngrd-1] = rightEdge-line.posf[line.ngrd-1];
+
+
+    ///////////// Fill in integral quantities
+    
+    //---------- rhoK, rhoJ, UrhoK, UrhoJ
+
+    for(i=0; i<line.ngrd; i++) {
+        intRhoKi[i]  = K[i]*line.rho[i]*dy[i];
+        intRhoJi[i]  = fabs(intRhoKi[i]);
+        KK          += K[i]*K[i]*dy[i];         
+        if(!odtP.Lspatial) {
+            rhoK        += intRhoKi[i];
+            rhoJ        += fabs(intRhoKi[i]);
+            rhoKK       += K[i]*intRhoKi[i];
+            rhoJK       += K[i]*intRhoJi[i];
+            uRhoK[0]    += intRhoKi[i]*line.uvel[i];
+            uRhoK[1]    += intRhoKi[i]*line.vvel[i];
+            uRhoK[2]    += intRhoKi[i]*line.wvel[i];
+            uRhoJ[0]    += intRhoJi[i]*line.uvel[i];
+            uRhoJ[1]    += intRhoJi[i]*line.vvel[i];
+            uRhoJ[2]    += intRhoJi[i]*line.wvel[i];
+        }
+        else {       // not mass, mass flux
+            rhoK        += line.uvel[i] * intRhoKi[i];
+            rhoJ        += line.uvel[i] * fabs(intRhoKi[i]);
+            rhoKK       += line.uvel[i] * K[i]*intRhoKi[i];
+            rhoJK       += line.uvel[i] * K[i]*intRhoJi[i];
+            uRhoK[0]    += line.uvel[i] * intRhoKi[i]*line.uvel[i];
+            uRhoK[1]    += line.uvel[i] * intRhoKi[i]*line.vvel[i];
+            uRhoK[2]    += line.uvel[i] * intRhoKi[i]*line.wvel[i];
+            uRhoJ[0]    += line.uvel[i] * intRhoJi[i]*line.uvel[i];
+            uRhoJ[1]    += line.uvel[i] * intRhoJi[i]*line.vvel[i];
+            uRhoJ[2]    += line.uvel[i] * intRhoJi[i]*line.wvel[i];
+        }
+    }
+
+    KK /= eddySize*eddySize*eddySize; // Exact model formulation gives KK=4/27
+
+    //////////// Compute Eddy Energy
+
+    A = rhoK/rhoJ;
+    S = 0.5*(A*A+1.0)*rhoKK - A*rhoJK;
+    for(i=0; i<3; i++) {
+        P[i] = uRhoK[i] - A * uRhoJ[i];
+        Q[i] = 0.25*P[i]*P[i]/S;
+    }
+
+    eKinEddy = KK * (Q[0]+Q[1]+Q[2]); 
+    
+    //////////// Compute Additional Surface Tension
+
+    double eSurfTens = odtP.eSurfTens;
+
+    if(odtP.eSurfTens != 0.0) {
+        int iSurfTens = 0;
+        LmultiPhaseEddy = false;
+        
+        for(i=0; i<line.ngrd-1; i++) {   
+            if(line.phase[i] != line.phase[i+1])
+                //return false; // temporary added by Falko
+                iSurfTens++; //USE POINTER TO line.phase
+        }
+        
+        eSurfTens = odtP.eSurfTens * KK * (iSurfTens * 2 * 2. / 3.); 
+        // KK for eKinEddy scaling, 2 for isotropic surface/vol, 2/3 for new interfaces
+        
+        if (iSurfTens > 0){
+            LmultiPhaseEddy = true;
+            //cout << endl << "Falko: Verhaeltnis = " << eSurfTens / eKinEddy << endl;
+        } 
+    }
+
+    //////////// Compute Viscous Energy Penalty
+
+    for(i=0; i<line.ngrd; i++) { 
+        rhoEddy +=line.rho[i]*dy[i];
+        viscEddy += dy[i]/line.molec[i];
+    }
+    rhoEddy  /= eddySize;
+    viscEddy  = eddySize/viscEddy;
+
+    double Ufavre;
+
+    eViscPenalty = Z_value*0.5 * viscEddy*viscEddy/rhoEddy/eddySize; 
+
+    if(odtP.Lspatial)  {
+        Ufavre = eddyFavreAvgVelocity(line);
+        eViscPenalty *= Ufavre;
+    }
+
+    //////////// Compute invTauEddy
+    //if (eSurfTens > 0){
+    //    cout << endl << "Falko: Verhaeltnis = " << eSurfTens / eKinEddy << " " << eKinEddy - eSurfTens - eViscPenalty << " " << sqrt(2.0*KK/rhoKK * (eKinEddy - eSurfTens - eViscPenalty)) << endl;
+    //}
+    
+    invTauEddy = 0.0;
+    if(odtP.LheatedChannel){
+        // FALKO debug: hier muss noch der Auftriebsterm hinzugefügt werden.
+        double ePotEddy = 0.0;
+        dd = eKinEddy - eSurfTens - ePotEddy - eViscPenalty;
+    }
+    else
+        dd = eKinEddy - eSurfTens - eViscPenalty;
+
+    if(dd < 0.0) 
+        return false;
+    invTauEddy = sqrt(2.0*KK/rhoKK * dd);
+
+    if(odtP.Lspatial) 
+        invTauEddy = invTauEddy/Ufavre; // 1/s --> 1/m
+
+
+    //////////// Compute Kernel Coefficients (THIS IS WASTEFUL)
+
+    if(odtP.Lspatial)
+        return true;               // vanilla odt for spatial formulation
+
+    cCoef[0] = 0.5/S * (-P[0] + (P[0]>0 ? 1.0 : -1.0) 
+                 * sqrt( (1-odtP.A_param)*P[0]*P[0]  
+                         //+ 0.5*odtP.A_param*(P[1]*P[1]+P[2]*P[2]) ));
+                         + 0.5*odtP.A_param*(P[1]*P[1]+P[2]*P[2]) - S*eSurfTens/3.0));
+    cCoef[1] = 0.5/S * (-P[1] + (P[1]>0 ? 1.0 : -1.0) 
+                 * sqrt( (1-odtP.A_param)*P[1]*P[1]  
+                         //+ 0.5*odtP.A_param*(P[0]*P[0]+P[2]*P[2]) ));
+                         + 0.5*odtP.A_param*(P[0]*P[0]+P[2]*P[2]) - S*eSurfTens/3.0));
+    cCoef[2] = 0.5/S * (-P[2] + (P[2]>0 ? 1.0 : -1.0) 
+                 * sqrt( (1-odtP.A_param)*P[2]*P[2]  
+                         //+ 0.5*odtP.A_param*(P[0]*P[0]+P[1]*P[1]) ));
+                         + 0.5*odtP.A_param*(P[0]*P[0]+P[1]*P[1]) -S*eSurfTens/3.0));
+                
+    for(i=0; i<3; i++)
+        bCoef[i] = -A*cCoef[i];
+
+    return true;
+
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+/** This is the constant property version of eddyTau, which is simpler and faster.
+*  Does not have the surface tension implemented.
+* 
+*  @param line    \input odtline object.
+*  @param odtP    \input parameters object.
+*  @param Z_value \input large eddy suppression parameter.
+*  @return false for implausible eddy, true for the usual, proper eddy.
+*/
+bool eddy::eddyTauCP(odtline &line, const odtParam &odtP, double Z_value) {
+
+
+    if(Z_value <= 0) Z_value = odtP.Z_param; //default is suppression coefficient
+
+    double         uK[3]={0,0,0};
+#ifndef COMPSCI
+    vector<double> dy(line.ngrd);
+#else
+    eddyTauDy.resize(line.ngrd);
+    vector<double>& dy = eddyTauDy;
+#endif
+
+    double         KK = 0;            // equilvalent of the 4/27 factor
+
+    int            i;
+
+    //////////// cell sizes
+
+    dy[0] = line.posf[1]-leftEdge;
+    for(i=1; i<line.ngrd-1; i++)
+        dy[i] = line.posf[i+1]-line.posf[i];
+    dy[line.ngrd-1] = rightEdge-line.posf[line.ngrd-1];
+
+    ///////////// Fill in integral quantities
+    
+    for(i=0; i<line.ngrd; i++) {                 //---------- K kernels: whole eddy
+        uK[0] += K[i]*line.uvel[i]*dy[i]; 
+        uK[1] += K[i]*line.vvel[i]*dy[i]; 
+        uK[2] += K[i]*line.wvel[i]*dy[i]; 
+        KK    += K[i]*K[i]*dy[i];         
+    }
+
+    //////////// Compute invTauEddy
+
+    double uk = uK[0]/eddySize/eddySize;
+    double vk = uK[1]/eddySize/eddySize;
+    double wk = uK[2]/eddySize/eddySize;
+
+    invTauEddy = 0.0;    
+
+    double invTauSq;
+    double eKinEddy     = uk*uk+vk*vk+wk*wk;
+    double eViscPenalty = Z_value*odtP.visc_0*odtP.visc_0 /
+                          (odtP.rho_0*odtP.rho_0*eddySize*eddySize);
+    if(odtP.LheatedChannel){
+        // FALKO debug: hier muss noch der Auftriebsterm hinzugefügt werden.
+        //double rhoK         = 0.0;
+        //for(i=0; i<line.ngrd; i++) {
+        //    rhoK        += (line.rho[i]-odtP.rho_0) * (eddySize - 2*(line.pos[i] - rightEdge) )*dy[i];
+        //rhoK = rhoK * 4.0 / 9.0 / eddySize;
+        double ePotEddy     = 0.0; //8.0 / 27.0 * rhoK * odtP.Grav / odtP.rho_0;
+        invTauSq = 1.0/(eddySize*eddySize) * (eKinEddy - ePotEddy - eViscPenalty);
+    }
+    else {
+        invTauSq = 1.0/(eddySize*eddySize) * (eKinEddy - eViscPenalty);
+    }
+
+    if(invTauSq < 0.0) 
+        return false; 
+    invTauEddy = sqrt(invTauSq);
+    
+    if(odtP.Lspatial)
+        invTauEddy = invTauEddy/eddyFavreAvgVelocity(line); // 1/s --> 1/m
+    
+    //////////// Compute Kernel Coefficients (THIS IS WASTEFUL)
+
+    if(odtP.Lspatial)
+        return true;               // vanilla odt for spatial formulation
+
+    double cFac = eddySize*eddySize/KK; //AKeddy based on numerical kernel
+    
+    cCoef[0] = cFac * ( -uk + (uk>0 ? 1.0 : -1.0)
+                              * sqrt( (1.0-odtP.A_param)*uk*uk
+                                      + 0.5*odtP.A_param*(vk*vk + wk*wk) ) ); 
+
+    cCoef[1] = cFac * ( -vk + (vk>0 ? 1.0 : -1.0)
+                              * sqrt( (1.0-odtP.A_param)*vk*vk
+                                      + 0.5*odtP.A_param*(uk*uk + wk*wk) ) ); 
+    cCoef[2] = cFac * ( -wk + (wk>0 ? 1.0 : -1.0)
+                              * sqrt( (1.0-odtP.A_param)*wk*wk
+                                      + 0.5*odtP.A_param*(uk*uk + vk*vk) ) ); 
+
+    return true; 
+
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+
+/** Get the Favre average streamwise velocity for spatial formulations.
+*  Used to convert from eddy timescale to the eddy spatial scale.
+* 
+*  @param line \input odtline object.
+*  @return value of the favre avg velocity
+*/
+double eddy::eddyFavreAvgVelocity(odtline &line) {
+
+    double ufavg = 0.0;
+    double ravg  = 0.0;
+    for(int i=0; i<line.ngrd; i++) {
+        ufavg += line.rho[i]*line.uvel[i];
+        ravg  += line.rho[i];
+    }
+    return ufavg/ravg;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+/**  Get eddy velocity v on the odtline through tripletMap of lagrangian tracer particles.
+*  (Only moves tracer particles, if the tracer flag is on.  Also computes veddy, needed below).
+*  \vc{
+*  before TM   |   { a }   |   { b }   |   { c }   |   
+*  after  TM   | a | b | c | c | b | a | a | b | c |
+*  }
+*  for example, if particle locates in the 1st third of b domain before TM, it will move to
+*  the 1st b domain after TM. The fraction of position in the cell will NOT change.
+*
+*  Moves position of tracer particles.
+*  For inertial particles, move particles as if tracers in order to compute vEddy for each particle.
+*  At the end of the function (for inertial particles), reset particle positions to initial.
+*  
+*  @param odtP      \input odt Parameters object
+*  @param line      \input odtline object
+*  @param eddyLine  \input eddy line (also an odtline object)
+*  @param part      \inout particles object
+*
+*  @author Guangyuan Sun 08/2011
+*/
+void eddy::getEddyVvel_TMtracers(const odtParam &odtP, odtline &line, odtline &eddyLine, particles &part) {
+    
+    eddyLife = part.ParamEddylife/invTauEddy;
+    if (!odtP.Iparticles) 
+        return;
+
+    vector<double> yPos0 = part.yPos;   
+    vEddy.resize(part.nPart);
+    double f13 = 1./3;
+    double f23 = 2./3;
+
+    for(int i=0; i<part.nPart; i++) {                
+
+        if (!part.pActive[i]) 
+            continue;
+        
+        if (LperiodicEddy) {
+            if((part.yPos[i] >= line.posf[0]) && (part.yPos[i] <= (rightEdge-line.Ldomain))) {
+                part.yPos[i] += line.Ldomain;
+            }
+        }
+        
+        double yPosInEddy = part.yPos[i];
+        
+        if ((part.yPos[i] >= leftEdge) && (part.yPos[i] <= rightEdge)) {            // only does particles in the eddy region
+            
+//            double iyPosInEddy = eddyLine.linePositionToIndex(part.yPos[i],true);
+//            double fracC = (part.yPos[i] - eddyLine.posf[iyPosInEddy])  / 
+//                (eddyLine.posf[iyPosInEddy+1] - eddyLine.posf[iyPosInEddy]);
+            /********************************************************************************************/
+//            part.set_iyPos();
+            part.iyPos[i] =  line.linePositionToIndex(part.yPos[i], true);
+            double fracC1 = (part.yPos[i] - line.posf[part.iyPos[i]])  / 
+                (line.posf[part.iyPos[i]+1] - line.posf[part.iyPos[i]]);
+            /********************************************************************************************/
+            double fracL = (part.yPos[i] - leftEdge) / eddySize;
+            if ((fracC1 >= 0.0) && (fracC1 < f13)) 
+                part.yPos[i] = leftEdge + fracL * (f13*eddySize);    
+            else if ((fracC1 >= f13) && (fracC1 < f23))
+                part.yPos[i] = leftEdge + (2.-fracL)*(f13*eddySize);
+            else
+                part.yPos[i] = leftEdge + (2.+fracL)*(f13*eddySize);
+
+            vEddy[i] = (part.yPos[i]-yPosInEddy)/eddyLife;
+
+            if(part.yPos[i] >= line.Ldomain){
+                part.yPos[i] -= line.Ldomain;
+            }
+        }
+
+        part.yPosTracer_TM[i] = part.yPos[i];
+
+        if (!part.Ltracer) {   ///inertia particle, new position and velocity will be calculated in eddy::getParticleUVWYafterEddy
+            part.yPos[i] = yPos0[i];
+            part.iyPos[i] = line.linePositionToIndex(part.yPos[i],true);
+        }
+    }
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+
+/** Get eddy velocities u and w
+*  by calculating the average of the velocity of each cell in the whole domain of eddy.
+*  Note that eddy velocity v is fluid velocity in y direction seen by the particles during particle-eddy interaction
+*  Therefore, eddy velocity v is different for different particles that interact with the same eddy
+*  eddy velocity v is calculated in eddy::tripletMapParticle function
+*
+*  @author Guangyuan Sun 08/2011
+*/
+
+void eddy::getEddyUWvel(odtline &line) {
+    
+    int iEdLeft  = line.linePositionToIndex(leftEdge,true);
+    int iEdRight = line.linePositionToIndex(rightEdge,true);
+    uEddy = line.uvel[iEdLeft]*(line.posf[iEdLeft+1]-leftEdge) + line.uvel[iEdRight]*(rightEdge-line.posf[iEdRight]);
+    wEddy = line.wvel[iEdLeft]*(line.posf[iEdLeft+1]-leftEdge) + line.wvel[iEdRight]*(rightEdge-line.posf[iEdRight]);
+    for(int i=iEdLeft+1; i<=iEdRight-1; i++) {
+        uEddy = uEddy + line.uvel[i]*(line.posf[i+1]-line.posf[i]);
+        wEddy = wEddy + line.wvel[i]*(line.posf[i+1]-line.posf[i]);
+    }
+    uEddy = uEddy/eddySize;
+    wEddy = wEddy/eddySize;
+
+}
+
+//////////////////////////////// Helper functions for eddy::getParticleUVWYafterEddy
+
+/// Helper function for eddy::getParticleUVWYafterEddy
+double eddy::X1(double Euvel, double Guvel, double Puvel, double Tau, double f, double AGx, double T) {
+    return -Euvel*T + 0.5*eddySize+(Guvel+AGx*Tau/f)*T+Tau/f*(Puvel-Guvel-AGx*Tau/f)*(1-exp(-T*f/Tau));
+}
+/// Helper function for eddy::getParticleUVWYafterEddy
+double eddy::X2(double Euvel, double Guvel, double Puvel, double Tau, double f, double AGx, double T) {
+    return -Euvel*T - 0.5*eddySize+(Guvel+AGx*Tau/f)*T+Tau/f*(Puvel-Guvel-AGx*Tau/f)*(1-exp(-T*f/Tau));
+}
+/// Helper function for eddy::getParticleUVWYafterEddy
+double eddy::derX(double Euvel, double Guvel, double Puvel, double Tau, double f, double AGx, double T) {
+    return -Euvel+(Guvel+AGx*Tau/f)+(Puvel-Guvel-AGx*Tau/f)*exp(-T*f/Tau);
+}
+/// Helper function for eddy::getParticleUVWYafterEddy
+double eddy::Y1(double PyPos, double Pvvel, double velEd, double Tau, double f, double AGy, double T) {
+    return -leftEdge+PyPos+velEd*(T-Tau/f*(1-exp(-T*f/Tau)));
+}
+/// Helper function for eddy::getParticleUVWYafterEddy
+double eddy::Y2(double PyPos, double Pvvel, double velEd, double Tau, double f, double AGy, double T) {
+    return -rightEdge+PyPos+velEd*(T-Tau/f*(1-exp(-T*f/Tau)));
+}
+/// Helper function for eddy::getParticleUVWYafterEddy
+double eddy::derY(double Pvvel, double velEd, double Tau, double f, double AGy, double T) {
+    return velEd*(1-exp(-T*f/Tau));
+}
+/// Helper function for eddy::getParticleUVWYafterEddy
+double eddy::Z1(double Ewvel, double Gwvel, double Pwvel, double Tau, double f, double AGz, double T) {
+    return -Ewvel*T + 0.5*eddySize+(Gwvel+AGz*Tau/f)*T+Tau/f*(Pwvel-Gwvel-AGz*Tau/f)*(1-exp(-T*f/Tau));
+}
+/// Helper function for eddy::getParticleUVWYafterEddy
+double eddy::Z2(double Ewvel, double Gwvel, double Pwvel, double Tau, double f, double AGz, double T) {
+    return -Ewvel*T - 0.5*eddySize+(Gwvel+AGz*Tau/f)*T+Tau/f*(Pwvel-Gwvel-AGz*Tau/f)*(1-exp(-T*f/Tau));
+}
+/// Helper function for eddy::getParticleUVWYafterEddy
+double eddy::derZ(double Ewvel, double Gwvel, double Pwvel, double Tau, double f, double AGz, double T) {
+    return -Ewvel + (Gwvel+AGz*Tau/f)+(Pwvel-Gwvel-AGz*Tau/f)*exp(-T*f/Tau);
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+
+/** compute new veclocity and position of each particle in ODT line direction
+ *  Newton's method
+ *  Guangyuan Sun 09/11
+ *
+ *  Code computes the y-location (line direction) and u,v,w particle velocities for and
+ *     instantaneous triplet map.
+ *
+ *  For particle interactions, eddies are assumed to have a cubical shape of size eddySize (L).
+ *     Call this the eddy box.
+ *  Line direction is y; x and z are streamwise and spanwise, resp.
+ *  Particle initial position is L/2 for x and z, and the original y-location for y.
+ *  Only particles in the box are considered.
+ *  Particle initial velocity vector is as input to function.
+ *
+ *  Compute the interaction time of the particle in the notional eddy box.  
+ *  Both the eddy and particle are assumed to move.  The eddy velocity is the average x,y,z fluid
+ *     velocities in the eddy region.  Hence, we have particle motion in a moving eddy box.
+ *     If the particle stays in the box, then the interaction time is the eddy time.
+ *     If the particle leaves the box, then it is the exit time.
+ *     Each direction is treated separately.
+ *  The interaction is treated here in absolute coordinates (lab-coordinates).
+ *                                                                              \cond
+ *  dv_p/dt = (f/tau_p) * (v_p - v_eddy) + g      --> particle drag law
+ *  dx/dt   = v_p                                 --> particle position
+ *  
+ *  The drag law is computed analytically to determine the interaction time.  Then, the 
+ *     particle position (y) and velocity components are computed.
+ *
+ *  In the line direction, (y) we want only the effect of the instantaneous eddy triplet map,
+ *     not the diffusional drag.  This is to avoid double counting with the subsequent 
+ *     diffusion process (after eddies occur).  The y position and y-velocity are computed using the difference
+ *     between the integrated drag law with and without the eddy velocity.
+ *
+ *  JCH added time of eddy occurrence as parameter to feed into particle histories.
+ *                                                                              \endcond
+ */
+
+void eddy::tripletMapParticles(const odtParam &odtP, odtline &line, odtline &eddyLine, particles &part, double eddyStartTime) {
+           
+    getEddyVvel_TMtracers(odtP, line, eddyLine, part); // tripletMap tracer particles 
+                                                       // and get eddy v velocity for inertial particles
+    
+    if(!odtP.Iparticles || part.Ltracer) // do not do the rest if tracer particles
+        return;
+
+    double Txmin;         // interaction time in x, y, z, directions.
+    double Tymin;
+    double Tzmin;
+    double Tmin;          // minimum interaction time = interaction time of particle with eddy.
+
+    getEddyUWvel(eddyLine);
+   
+    // ---------- ballistic particle
+    
+    if(part.Lballistic) {
+
+        for(int i=0; i<part.nPart; i++) {
+
+            if (!part.pActive[i]) continue;                                     // skip inactive particles (e.g. wall collisions/outflow)
+        
+            if (LperiodicEddy) {
+                if((part.yPos[i] >= line.posf[0]) && (part.yPos[i] <= (rightEdge-line.Ldomain))) {
+                    part.yPos[i] += line.Ldomain;
+                }
+            }
+        
+            if ((part.yPos[i] >= leftEdge) && (part.yPos[i] <= rightEdge)) {    // only does particles in the eddy region
+
+                if ( ((leftEdge == part.yPos[i])  && (part.vvel[i] < 0.0)) ||   // skip if part on edge and moving out of eddy box
+                        ((rightEdge == part.yPos[i]) && (part.vvel[i] > 0.0)) || 
+                        (vEddy[i] == 0.0)) {
+                    continue;
+                }
+             
+                if((part.uvel[i]-uEddy) < 0.0) 
+                    Txmin = abs(0.5*eddySize/(uEddy-part.uvel[i]));
+                else if((part.uvel[i]-uEddy) > 0.0) 
+                    Txmin = abs(0.5*eddySize/(part.uvel[i]-uEddy));
+                else
+                    Txmin = abs(eddyLife);
+                
+                if((part.vvel[i]-vEddy[i]) < 0.0) 
+                    Tymin = abs((part.yPos[i]-leftEdge)/(vEddy[i]-part.vvel[i]));
+                else if((part.vvel[i]-vEddy[i]) > 0.0) 
+                    Tymin = abs((rightEdge-part.yPos[i])/(part.vvel[i]-vEddy[i]));
+                else
+                    Tymin = abs(eddyLife);
+                
+                if((part.wvel[i]-wEddy) < 0.0) 
+                    Tzmin = abs(0.5*eddySize/(wEddy-part.wvel[i]));
+                else if((part.wvel[i]-wEddy) > 0.0) 
+                    Tzmin = abs(0.5*eddySize/(part.wvel[i]-wEddy));
+                else
+                    Tzmin = abs(eddyLife);
+            
+            double yPosOld = part.yPos[i];
+            Tmin = min(min(Txmin,Tymin),min(Tymin,Tzmin));
+            part.yPos[i] = part.yPos[i] + part.vvel[i]*Tmin;
+            if(part.yPos[i] >= line.Ldomain) 
+                part.yPos[i] -= line.Ldomain;
+
+            //------------------- Store the effect of every eddy on each particle including 
+            //                    (1)eddy end time (eddyEndTime); 
+            //                    (2)relative velocity between particle and eddy (relativeVelEdPart); 
+            double vHTpos = 0;
+            if(LperiodicEddy)
+                vHTpos = part.yPosTracer_TM[i] + line.Ldomain;
+            else
+                vHTpos =  part.yPosTracer_TM[i];
+            
+            double relativeVelEdPart = (part.yPos[i]-vHTpos)/Tmin;
+            part.yPos[i] = yPosOld;
+            double eddyEndTime = eddyStartTime + Tmin;
+           
+            part.updateEddyInfoArray(i, eddyEndTime, relativeVelEdPart);
+            }    
+        }
+    }
+    
+    // ---------- inertial particle
+
+    else { 
+
+    part.set_TauP();
+
+    int maxIt=1000;
+
+    for(int i=0; i<part.nPart; i++) {
+
+        if (!part.pActive[i]) continue;                                     // skip inactive particles (e.g. wall collisions/outflow)
+
+        if (LperiodicEddy) {
+            if((part.yPos[i] >= line.posf[0]) && (part.yPos[i] <= (rightEdge-line.Ldomain))) {
+                part.yPos[i] += line.Ldomain;
+            }
+        }
+        
+        if ((part.yPos[i] >= leftEdge) && (part.yPos[i] <= rightEdge)) {    // only does particles in the eddy region
+
+            if ( ((leftEdge == part.yPos[i])  && (part.vvel[i] < 0.0)) ||   // skip if part on edge and moving out of eddy box
+                    ((rightEdge == part.yPos[i]) && (part.vvel[i] > 0.0)) || 
+                    (vEddy[i] == 0.0)) {
+                continue;
+            }
+
+            double iyPosInEddy = eddyLine.linePositionToIndex(part.yPos[i],true);
+            
+            //-------------------  Compute Txmin = minimum of (eddy life) and (time to cross x-eddy box boundary) (z is similar, not y)
+
+            double xEddy = uEddy * eddyLife;           // displacement of eddy box over time eddyLife
+            double xPart = xEddy-0.5*eddySize +        // displacement of particle over time eddyLife
+                X1(uEddy, eddyLine.uvel[iyPosInEddy], 
+                        part.uvel[i], part.TauP[i], 
+                        part.f[i], part.AGx, eddyLife);
+
+            if ((xPart <= (0.5*eddySize+xEddy)) &&     // check if particle is in the eddy box,
+                    (xPart >= (-0.5*eddySize+xEddy)))      //       if it is, the interaction time is the eddy life
+                Txmin = eddyLife;                   
+            else if (xPart < (-0.5*eddySize+xEddy)) {  // else particle crosses on left edge
+                double Told = eddyLife, Tnew;
+                for(int j=1; j<=maxIt; j++) {
+                    double xx1 = X1(uEddy, eddyLine.uvel[iyPosInEddy], part.uvel[i], part.TauP[i], part.f[i], part.AGx, Told);
+                    double xx2 = derX(uEddy, eddyLine.uvel[iyPosInEddy], part.uvel[i], part.TauP[i], part.f[i], part.AGx, Told);
+                    Tnew = Told - xx1/xx2;
+                    if (abs(Told-Tnew)<=1e-8 && Tnew > 0.) { 
+                        Txmin = Tnew;
+                        break; 
+                    }
+                    Told = Tnew;
+                    if(j==maxIt) 
+                        *proc.ostrm << endl << "# warning in eddy::getParticleUVWYafterEddy, not converged" << endl;
+                }
+            }
+            else {                                    // else particle crosses on right edge
+                double Told = eddyLife, Tnew;
+                for(int j=1; j<=maxIt; j++) {
+                    double xx1 = X2(uEddy, eddyLine.uvel[iyPosInEddy], part.uvel[i], part.TauP[i], part.f[i], part.AGx, Told);
+                    double xx2 = derX(uEddy, eddyLine.uvel[iyPosInEddy], part.uvel[i], part.TauP[i], part.f[i], part.AGx, Told);
+                    Tnew = Told - xx1/xx2;
+                    if (abs(Told-Tnew)<=1e-8 && Tnew > 0.) {
+                        Txmin = Tnew;
+                        break;
+                    }                            
+                    Told = Tnew;
+                    if(j==maxIt) 
+                        *proc.ostrm << endl << "# warning in eddy::getParticleUVWYafterEddy, not converged" << endl;
+                }
+            }
+
+            //-------------------  Compute Tymin = minimum of (eddy life) and (time to cross y-eddy box boundary) 
+
+            double yPart = leftEdge + Y1(part.yPos[i], part.vvel[i], vEddy[i], part.TauP[i], part.f[i], part.AGy, eddyLife);
+            if ((yPart <= rightEdge) && (yPart >= leftEdge))
+                Tymin = eddyLife;
+            else if (yPart < leftEdge) {
+                double Told = eddyLife, Tnew;
+                for(int j=1; j<=maxIt; j++) {
+                    double yy1 = Y1(part.yPos[i], part.vvel[i], vEddy[i], part.TauP[i], part.f[i], part.AGy, Told);
+                    double yy2 = derY(part.vvel[i], vEddy[i], part.TauP[i], part.f[i], part.AGy, Told);
+                    Tnew = Told - yy1/yy2;
+                    if (abs(Told-Tnew)<=1e-8 && Tnew > 0.) {
+                        Tymin = Tnew;
+                        break;
+                    }    
+                    Told = Tnew;
+                    if(j==maxIt) 
+                        *proc.ostrm << endl << "# warning in eddy::getParticleUVWYafterEddy, not converged" << endl;
+                }
+            }
+            else {
+                double Told = eddyLife, Tnew;
+                for(int j=1; j<=maxIt; j++) {
+                    double yy1 = Y2(part.yPos[i], part.vvel[i], vEddy[i], part.TauP[i], part.f[i], part.AGy, Told);
+                    double yy2 = derY(part.vvel[i], vEddy[i], part.TauP[i], part.f[i], part.AGy, Told);
+                    Tnew = Told - yy1/yy2;
+                    if (abs(Told-Tnew)<=1e-8 && Tnew > 0.) {
+                        Tymin = Tnew;
+                        break;
+                    }    
+                    Told = Tnew;
+                    if(j==maxIt) 
+                        *proc.ostrm << endl << "# warning in eddy::getParticleUVWYafterEddy, not converged" << endl;
+                }
+            }
+
+            //-------------------  Compute Tzmin = minimum of (eddy life) and (time to cross z-eddy box boundary) (x is similar, not y)
+
+            double zEddy = wEddy * eddyLife;
+            double zPart = zEddy-0.5*eddySize + Z1(wEddy, eddyLine.wvel[iyPosInEddy], part.wvel[i], part.TauP[i], part.f[i], part.AGz, eddyLife);
+
+            if ((zPart <= (0.5*eddySize+zEddy)) && (zPart >= (-0.5*eddySize+zEddy)))
+                Tzmin = eddyLife;
+            else if (zPart < (-0.5*eddySize+zEddy)) {
+                double Told = eddyLife, Tnew;
+                for(int j=1; j<=maxIt; j++) {
+                    double zz1 = Z1(wEddy, eddyLine.wvel[iyPosInEddy], part.wvel[i], part.TauP[i], part.f[i], part.AGz, Told);
+                    double zz2 = derZ(wEddy, eddyLine.wvel[iyPosInEddy], part.wvel[i], part.TauP[i], part.f[i], part.AGz, Told);
+                    Tnew = Told - zz1/zz2;
+                    if (abs(Told-Tnew)<=1e-8 && Tnew > 0.) {
+                        Tzmin = Tnew;
+                        break; 
+                    }
+                    Told = Tnew;
+                    if(j==maxIt) 
+                        *proc.ostrm << endl << "# warning in eddy::getParticleUVWYafterEddy, not converged" << endl;
+                }
+            }
+            else {
+                double Told = eddyLife, Tnew;
+                for(int j=1; j<=maxIt; j++) {
+                    double zz1 = Z2(wEddy, eddyLine.wvel[iyPosInEddy], part.wvel[i], part.TauP[i], part.f[i], part.AGz, Told);
+                    double zz2 = derZ(wEddy, eddyLine.wvel[iyPosInEddy], part.wvel[i], part.TauP[i], part.f[i], part.AGz, Told);
+                    Tnew = Told - zz1/zz2;
+                    if (abs(Told-Tnew)<=1e-8 && Tnew > 0.) {
+                        Tzmin = Tnew;
+                        break;
+                    }
+                    Told = Tnew;
+                    if(j==maxIt) 
+                        *proc.ostrm << endl << "# warning in eddy::getParticleUVWYafterEddy, not converged" << endl;
+                }
+            }
+
+            //-------------------  
+
+            Tmin = min(min(Txmin,Tymin),min(Tymin,Tzmin));
+            double cons1 = part.TauP[i]/part.f[i];
+            double cons2 = uEddy+cons1*part.AGx;
+            double cons3 = cons1*(1-exp(-Tmin/cons1));
+            double cons4 = wEddy+cons1*part.AGz;
+
+                //------------------- adjust particle histories
+
+                if ( part.Lhistories ) {
+                    part.adjustEddyVelHistories( i, eddyStartTime, Tmin, cons1, vEddy[i], part.vvel[i] );
+                }
+
+                //-------------------
+
+            part.yPos[i] = part.yPos[i] + vEddy[i]*(Tmin-cons3);
+            if(part.yPos[i] >= line.Ldomain) part.yPos[i] -= line.Ldomain;
+            part.uvel[i] = cons2+(part.uvel[i]-cons2)*exp(-Tmin/cons1);
+            part.vvel[i] = part.vvel[i]+vEddy[i]*(1-exp(-Tmin/cons1));
+            part.wvel[i] = cons4+(part.wvel[i]-cons4)*exp(-Tmin/cons1);
+
+                //------------------- Store the effect of every eddy on each particle including 
+                //                    (1)eddy end time (eddyEndTime); 
+                //                    (2)relative velocity between particle and eddy (relativeVelEdPart); 
+//            if (odtP.Lperiodic) 
+//                double newPos = part.yPosTracer_TM[i] - 
+                double relativeVelEdPart = (part.yPos[i]-part.yPosTracer_TM[i])/Tmin;
+                double eddyEndTime = eddyStartTime + Tmin;
+                part.updateEddyInfoArray(i, eddyEndTime, relativeVelEdPart);
+        }
+        
+        } // inertial particle loop end
+    part.set_TauP();
+    } // inertial particle end
+} 
+
+/////////////////////////////DOXYGEN DOCUMENTATION//////////////////////////////////////////////////
+
+/*! \fn void eddy::tripletMapParticles(const odtParam &odtP, odtline &line, odtline &eddyLine, particles &part, double eddyStartTime)
+ *  \n
+ *  \fun{\frac{dv_p}{dt} = \frac{f}{\tau_p} (v_p - v_{eddy}) + g}      --> particle drag law\n
+ *  \fun{\frac{dx}{dt}   = v_p}                                        --> particle position\n\n
+ *
+ *  The drag law is computed analytically to determine the interaction time.  Then, the
+ *     particle position (y) and velocity components are computed.
+ *
+ *  In the line direction, (y) we want only the effect of the instantaneous eddy triplet map,
+ *     not the diffusional drag.  This is to avoid double counting with the subsequent
+ *     diffusion process (after eddies occur).  The y position and y-velocity are computed using the difference
+ *     between the integrated drag law with and without the eddy velocity.
+ *
+ *  JCH added time of eddy occurrence as parameter to feed into particle histories.
+ *
+ * @param odtP \input parameters object
+ * @param line \input current odtline
+ * @param eddyLine \input odtline object that contains info about the eddy line.
+ * @param part \inout particles object
+ * @param eddyStartTime \input eddy start time
+ */
+
+/////////////////////////////END DOXYGEN DOCUMENTATION////////////////////////////////////////////////

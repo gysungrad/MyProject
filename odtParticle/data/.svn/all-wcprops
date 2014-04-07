@@ -1,0 +1,17 @@
+K 25
+svn:wc:ra_dav:version-url
+V 42
+/svn/odtame-odt/!svn/ver/34/trunk/odt/data
+END
+clear.sh
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/svn/odtame-odt/!svn/ver/34/trunk/odt/data/clear.sh
+END
+README
+K 25
+svn:wc:ra_dav:version-url
+V 49
+/svn/odtame-odt/!svn/ver/34/trunk/odt/data/README
+END

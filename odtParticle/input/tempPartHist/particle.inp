@@ -1,0 +1,44 @@
+0              (Ltracer)         nonzero for tracer particle that always follow the fluid
+0              (Lballistic)      For stationary particles
+0.00005       (part_Radius)     initial particle radius
+1              (part_Length)     particle Length(for cylindrical particles)
+1              (part_Shape)      particle Shape(sphere=2, cylinder=1, flate plate=0)
+1620            (part_Density)    inital particle density
+0.05           (Param_Eddylife)  Eddylife = Param_Eddylife * invTauEddy
+1              (Ninitial)        initial number the fake particles represent(#/m^2)
+0.999717       (void_Frac)       void fraction in each cell (if initPartLoc in odtParam.inp is 5)
+298.15         (pTempInitial)    initial temperature of particle(K)
+3              (initPartLoc)     initial particle location. (when 5, void_Frac must be greater than 0, usually 0.999)
+0              (initPartLeftLocFrac)    Initial location of left most particle (in fraction of domain)
+1              (initPartLocFrac)         Initial particle locs spread over this fraction of domain
+1             (ngrd)     radial number of grid points
+
+1              (Lhistories)     flag of each particle history (Ypos, Vpar [+ Zmix(mixture fraction),Tgas(temperature environment of particle)])
+0.0001        (deltaTimeHistory) interval between particle histories--should be a few times less than tauP and Kolmogorov time
+
+0              (Ldeposition)     wall-bounded type : 1 ---- deposition statistic; 0 ---- velocity statistic
+1              (PeddyType)       two-way coupling type : 1 ---- type I; 2 ---- type C; 3 ---- type IC
+0              (moveEddy)        nonzeo for moving eddy "box" in type-C (PeddyType = 2) or type-IC (PeddyType = 3)
+
+0.0            (AGx)           particle gravity constant in x direction
+0.0            (AGy)           particle gravity constant in y direction
+0.0            (AGz)           particle gravity constant in z direction
+
+0              (initPartVel)    initial particle velocity type : 0 ---- zero velocity; 1 ---- line velocity; 2 ---- hard coding below
+0              (initPartUvel)   initial particle U velocity
+0              (initPartVvel)   initial particle U velocity
+0              (initPartVvel)   initial particle U velocity
+
+10             (nPartInitLoc)   size of partInitLoc vector
+vector nPartInitLoc begin
+0.275
+0.28
+0.285
+0.29
+0.295
+0.305
+0.31
+0.315
+0.32
+0.325
+vector nPartInitLoc end

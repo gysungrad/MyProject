@@ -1,0 +1,249 @@
+/**
+ * @file main.cc
+ * Source file for class main
+ */
+
+#include <iostream>
+#include <vector>
+#include <fstream>
+#include <iomanip>
+#include <ctime>
+#include <cstdlib>
+#include "odtline.h"
+#include "odtParam.h"
+#include "eddy.h"
+#include "odtSolver.h"
+#include "diffuser.h"
+#include "adaptMesh.h"
+#include "streams.h"
+#include <sys/stat.h>             // for mkdir
+
+#ifdef DOCANTERA
+#ifndef CANTERA21
+#include "Cantera.h"
+#endif
+#include "IdealGasMix.h"
+#include "transport.h"
+#endif
+
+#include "cantera_shell_functions.h"
+#include "processor.h"
+
+#ifdef DOMPI
+#include <mpi.h>
+#endif 
+
+using namespace std;
+using Cantera::Transport;
+using Cantera::newTransportMgr;
+#ifdef CANTERA18
+using Cantera_CXX::IdealGasMix;
+#else
+using Cantera::IdealGasMix;
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
+processor proc;       // declare global proc object (holds MPI info)
+string inputFileDir; //declare global string (holds input file directory - optional command line
+///////////////////////////////////////////////////////////////////////////////
+
+int main(int argc, char* argv[]) {
+
+    time_t mytimeStart, mytimeEnd;
+    mytimeStart = time(0);
+    *proc.ostrm << endl << "#################################################################";
+    *proc.ostrm << endl << "#  Start Time = " << ctime(&mytimeStart);
+    *proc.ostrm << endl << "#################################################################";
+#ifdef DOMPI
+    *proc.ostrm << endl << "# Do MPI";
+#endif
+#ifdef DOCANTERA
+    *proc.ostrm << endl << "# Do Cantera";
+#endif
+#ifdef CANTERA18
+    *proc.ostrm << endl << "# Do Cantera 1.8";
+#endif
+#ifdef CANTERA21
+    *proc.ostrm << endl << "# Do Cantera 2.1";
+#endif
+#ifdef PROBLEMSPECIFICRR
+    *proc.ostrm << endl << "# CHEMISTRY = USUAL";
+#else
+    *proc.ostrm << endl << "# CHEMISTRY = ONESTEP";
+#endif
+#ifdef DOMTRAND
+    *proc.ostrm << endl << "# MTWIST    = YES";
+#endif
+#ifdef OLDMESHER
+    *proc.ostrm << endl << "# OLDMESHER = YES";
+#endif
+#ifdef COMPSCI
+    *proc.ostrm << endl << "# COMPSCI   = YES";
+#endif
+#ifdef IMPLICIT
+    *proc.ostrm << endl << "# IMPLICIT  = YES";
+#endif
+#ifdef NEWSTATS
+  #ifdef NEWSTATSH
+    #ifdef NEWSTATSF
+        *proc.ostrm << endl << "# NEWSTATS  = FUHI";
+    #else
+        *proc.ostrm << endl << "# NEWSTATS  = HIGH";
+    #endif
+  #else
+    #ifdef NEWSTATSF
+        *proc.ostrm << endl << "# NEWSTATS  = FULL";
+    #else
+        *proc.ostrm << endl << "# NEWSTATS  = YES";
+    #endif
+  #endif
+#endif
+#ifdef DEBUG
+    *proc.ostrm << endl << "# DEBUG     = YES";
+#endif
+    *proc.ostrm << endl;
+
+    //------------------------------------------------------------------------------------
+    // In parallel, processors need to wait in line to read input files
+    // So procs 1:nproc-1 wait to hear from 0:nproc-2
+#ifdef DOMPI
+    int idumb = 0;
+    if(proc.myid != 0)                  // all but first wait for previous before proceeding
+        MPI_Recv(&idumb, 1, MPI_INT, proc.myid-1, MPI_ANY_TAG, MPI_COMM_WORLD, &proc.status);
+#endif
+    //------------------------------------------------------------------------------------
+
+    if (argc >=2){
+        inputFileDir = argv[1];
+        inputFileDir = inputFileDir+"/";
+    }
+    else
+        inputFileDir = "";
+    if( argc > 2) {
+        int myid = atoi(argv[2]);
+        proc.myid = myid;
+        stringstream ss1; string s1;
+        ss1.clear(); ss1 << argv[2]; ss1 >> s1;
+        proc.dataDir = "../data/data_" + s1 + "/";   
+        int iflag = mkdir(proc.dataDir.c_str(), 0755);
+        if(iflag != 0)  {
+            cout << "\n***** Error, process " << myid << " failed to create " 
+                << proc.dataDir << ", or it was already there" << endl;
+            cout << endl << "make sure you are not compiling with DOMPI" << endl;
+            exit(0);
+        }
+        string fname = "./RUNTIME/runtime_" + s1;
+        proc.ostrm = new ofstream(fname.c_str());
+    }
+
+    //------------------------------------------------------------------------------------
+
+
+    odtParam odtP_temp("../input/" + inputFileDir + "odtParam.inp", "../input/" + inputFileDir + "bc.inp"); // just for chemMechFile for gas
+
+    IdealGasMix  gas("../input/" + inputFileDir + odtP_temp.chemMechFile); 
+    Transport   *tran = newTransportMgr("Mix", &gas);      // Cantera object
+
+    streams              combStrms(&gas);
+
+    odtSolver odtS("../input/" +inputFileDir + "odtParam.inp", 
+                   "../input/" + inputFileDir + "bc.inp",
+		   "../input/"+ inputFileDir + odtP_temp.restartOdtL,
+		   "../input/"+ inputFileDir + odtP_temp.restartPart,
+		   "../input/"+ inputFileDir + odtP_temp.caseInp,
+		   "../input/"+ inputFileDir + odtP_temp.partInp,
+		  "../input/"+  inputFileDir + odtP_temp.tableInp,
+//                    "../input/restart_odtl.dat",
+//                    "../input/restart_particles.dat",
+//                    "../input/odtl_scal_mixl_jet.inp",
+//                    "../input/particle.inp",
+//                  "../input/c2h2_table_mixf_hl_chi0.5.dat",
+                   combStrms, gas, tran);
+
+    //------------------------------------------------------------------------------------
+#ifdef DOMPI
+    if(proc.myid != proc.nproc-1)        // all but last send message to next to proceed
+        MPI_Send(&idumb, 1, MPI_INT, proc.myid+1, 0, MPI_COMM_WORLD);
+#endif
+    //------------------------------------------------------------------------------------
+
+    odtS.mainLine->outputProperties(proc.dataDir+"odt_init.dat");
+    if(odtS.odtP.Iparticles)
+        odtS.part->outputProperties(proc.dataDir+"particles_init.dat");
+    
+    odtS.calculateSoln();    
+//    odtS.lineDiffuser->diffuseOdtLine(0.1      , 0.0, odtS.odtStats);
+
+    odtS.mainLine->outputProperties(proc.dataDir+"odt_final.dat");
+    if(odtS.odtP.Iparticles)
+        odtS.part->outputProperties(proc.dataDir+"particles_final.dat");
+
+    //------------------------------------------------------------------------------------
+#ifdef NEWSTATS
+    stringstream ss1;  string s1;
+#ifdef DOMPI
+    cout << endl << "## finished calculation" << proc.myid;
+
+    // waiting for other ODTs
+    if (proc.myid != proc.nproc-1){
+        MPI_Recv(&idumb, 1, MPI_INT, proc.myid+1, MPI_ANY_TAG, MPI_COMM_WORLD, &proc.status);
+        cout << endl << "## recieved proc " << proc.myid+1 << " has finished BSnap";
+    }
+
+    // calculating output for data of proc 1
+    *proc.ostrm << endl << "#  Calculating budget terms of processor " << proc.myid;
+    cout << endl << "#  Calculating budget terms of processor " << proc.myid;
+    odtS.odtStats.BSnap(proc.myid);
+    cout << endl << "## BSnap for proc " << proc.myid << " has finished";
+    
+    // telling next ODT to start
+    if (proc.myid != 0){
+        cout << endl << "## send proc " << proc.myid << "has finished BSnap";
+        MPI_Ssend(&idumb, 1, MPI_INT, proc.myid-1, 0, MPI_COMM_WORLD);
+    }
+    
+    // loading stats of other ODT 
+    if (proc.myid == 0){
+        for(int i = 1; i < proc.nproc; i++){
+            // adding up data of all procs
+            odtS.odtStats.BLoadStats(i);
+        }
+        
+        // calculating output for data of all procs
+        *proc.ostrm << endl << "#  Calculating budget terms of all processors";
+        cout << endl << "#  Calculating budget terms of all processors";
+        odtS.odtStats.BSnap(-1);
+        cout << endl << "## BSnap for all processors has finished";
+        MPI_Ssend(&idumb, 1, MPI_INT, proc.myid+1, 0, MPI_COMM_WORLD);
+    }
+    else if (proc.myid != 0 && proc.myid != proc.nproc-1){
+        MPI_Recv(&idumb, 1, MPI_INT, proc.myid-1, MPI_ANY_TAG, MPI_COMM_WORLD, &proc.status);
+        MPI_Ssend(&idumb, 1, MPI_INT, proc.myid+1, 0, MPI_COMM_WORLD);
+    }
+    else{
+        MPI_Recv(&idumb, 1, MPI_INT, proc.myid-1, MPI_ANY_TAG, MPI_COMM_WORLD, &proc.status);
+    }
+
+#else
+    *proc.ostrm << endl << "## finished " << proc.myid;
+
+    // calculating the outputs and statistics
+    odtS.odtStats.BSnap(proc.myid);
+#endif
+#endif
+    //------------------------------------------------------------------------------------
+
+    
+    
+    mytimeEnd = time(0);
+    *proc.ostrm << endl << "#################################################################";
+    *proc.ostrm << endl << "#  Start Time = " << ctime(&mytimeStart);
+    *proc.ostrm << endl << "#  End Time   = " << ctime(&mytimeEnd);
+    *proc.ostrm << endl << "#################################################################";
+    *proc.ostrm << endl;
+
+    return 0;
+
+}
+
+

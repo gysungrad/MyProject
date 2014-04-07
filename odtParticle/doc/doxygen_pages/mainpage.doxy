@@ -1,0 +1,160 @@
+/**
+
+@mainpage
+<!-- 
+This is being rendered into HTML code, so you can comment things out using HTML-style comments.
+You can also insert LaTeX equations...
+An example of an inline equation is \f$ ax^2 + bx + c = 0 \f$, and an example of a nice-looking display equation is:
+\f[ ax^2 + bx + c = 0 \f]
+-->
+
+<h2>Table of Contents</h2>
+
+@ref layout
+
+@ref firststeps
+
+- @ref svn
+
+- @ref makefile
+
+@ref inputfile
+
+@ref running
+
+@ref postprocessing
+
+@ref code_theory
+
+@ref example_anchor
+
+(what other sections should go here?)
+
+<br>
+<br>
+<br>
+
+@ref notes
+
+<br>
+<br>
+<br>
+
+
+
+<hr />
+
+
+
+@section layout Source Code Layout
+This ODT code is divided into 6 main directories:
+- \c build/    - contains makefiles related to building the code
+- \c data/     - contains all data files produced by the ODT code
+- \c doc/      - contains documentation of the code.  The directory doc/doxygen has doxygen output.
+- \c input/    - contains the input file for the code (see \ref inputfile "Input File" section below)
+- \c run/      - contains the executable
+- \c source/   - contains all source code for the ODT program
+
+<hr />
+
+
+
+@section firststeps Getting the Code Running
+- Check out the code from the SVN repository (see \ref svn "SVN Repository" section below for details)
+\code
+svn checkout http://svn2.xp-dev.com/svn/odtame-odt/ /your/path
+\endcode
+The path you give to your working copy can be an absolute path (e.g. \c /home/john/odt/) or it can be a folder in the current directory (e.g. \c odt/).
+
+- Modify the Makefile to suit your system (see \ref makefile "Makefile" section below for details)
+
+- Compile the code
+\code
+cd /path/to/your/working/copy/
+cd build/
+make all
+\endcode
+
+
+
+@subsection svn Subversion Repository
+Subversion is an open-source version control system (see <a href="http://subversion.tigris.org/">subversion.tigris.org</a> or <a href="http://en.wikipedia.org/wiki/Subversion_(software)">Subversion (Wikipedia)</a> for more information).
+The directory structure for this repository is typical of most SVN repositories. It contains three directories, each of which serves a unique purpose:
+- \c trunk/      - This contains the main branch of the code. if you simply want to work with the latest "mainline" version of the code, add "trunk/" to teh end of the svn checkout location.
+- \c branches/   - This directory contains "branches", which are individual working versions of the code. Each branch typically implements a major change int he code that may eventually be merged with the "trunk"; these branches are kept separate, however, until bugs are fixed, implementation details are worked out, etc.
+- \c tags/       - This directory contains "tags", which are snapshots of the code that may be useful later. The most typical use of tags is to create "release versions", e.g. "Version 1.0", "Version 2.0', etc. - these would be directories in the tags/ directory).
+
+
+
+@subsection makefile Makefile
+Files relevant to making (or building) the code are located in the \c build/ directory.
+
+The code comes with several machine-specific makefiles (called \c make.######) written for different machines. You will probably have to modify one to fit your needs. When you're ready to make the program, you'll type \c make, which will run the instructions in the main makefile, called \c Makefile.  This file points to one of the machine-specific makefiles.
+
+By default, \c Makefile points to \c make.MAC. You can open \c Makefile in your favorite text editor and change the MACH variable to point to \c make.MYWORKSTATION.  Now open \c make.MYWORKSTATION in your favorite text editor.
+
+There are a few flags that must be set, depending on how you plan to use the ODT code. These include:
+
+The CHEMISTRY flag can be set to three values:
+- ONESTEP     - (this does something...)
+- USUAL	      - (this does something else...)
+- (blank)     - (this does something else...)
+
+The CANTERA flag can be set to YES or NO; this controls whether you use Cantera for... (is Cantera used for properties like viscosity and density?)
+
+The MTWIST flag can be set to YES or NO; this controls whether you use the Marsenne Twister random number generator.
+
+CC_COMPILER_NAME sets your C++ compiler. options sets different compiler flags; "-O3" (letter O, not the digit 0) is recommended to optimize the code to run faster.
+
+Finally, you must tell your compiler where your Cantera libraries and header files are located. If you have installed Cantera in /path/to/cantera/, these locations will (most likely) be (respectively):
+- /path/to/cantera/lib/
+- /path/to/cantera/include/cantera/
+
+Note that if you specify CANTERA = NO, you must still set the CANT_LIB and CANT_INC variables to something.
+
+
+
+<hr />
+
+
+
+@section inputfile Input File
+Details about the input file
+
+
+
+<hr />
+
+
+
+@section running Running The Code
+Details about running the code 
+
+
+
+<hr />
+
+
+
+@section postprocessing Post-processing
+Details about post-processing (e.g. gnuplot)
+
+
+<hr />
+
+@section code_theory Code Theory
+Documents containing information on the theory behind the ODT code.
+- <a href="pdf/eddyEvents.pdf" target="_blank">ODT Eddy Events</a> (pdf)
+- <a href="pdf/Lignell_Kerstein_Sun_Monson_TCFD.pdf" target="_blank">Mesh 
+     adaption for efficient multiscale implemenation of One-Dimensional Turbulence</a> (pdf)
+
+<hr />
+
+
+@anchor example_anchor This is an example anchor
+Here is some example text for the example anchor.
+
+
+
+*/
+

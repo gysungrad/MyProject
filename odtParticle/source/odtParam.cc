@@ -1,0 +1,374 @@
+/**
+ * @file odtParam.cc
+ * Source file for class odtParam
+ */
+
+#include "odtParam.h"
+#include <string>
+#include <cmath>
+#include <iostream>
+#include <climits>
+#include <cstdlib>
+#include <iomanip>
+#include <fstream>
+#include <sstream>
+
+using namespace std;
+
+///////////////////////////////////////////////////////////////////////////////
+
+/** Constructor function.  Defines default values, and reads the input files,
+ *  and computes several derived quantities used in the simulation.
+ *  @todo Default values are redundant with those on read input
+ *
+ *  @param fileName \input name of odt parameters file.
+ *  @param bcFile   \input name of boundary conditions file.
+ */
+odtParam::odtParam(std::string fileName, std::string bcFile) {
+
+    readOdtParam(fileName);
+
+    Lperiodic = false;
+    
+    if(bcType == 1) {
+        Lperiodic = true;
+    }
+    if(modDump<=0)
+        modDump = INT_MAX;
+    if(modDisp<=0)
+        modDisp = INT_MAX;
+    if(modActv<=0)
+        modActv = INT_MAX;
+
+    if(Lrxn && LconstProp) {
+        cout << endl << "************ Warning, Lrxn and LconsProp are true"
+             << endl << " setting LconsProp to false";
+        LconstProp = false;
+    }
+
+    if(eSurfTens != 0.0 && LconstProp == 1) {
+        cout << endl << "************ ERROR: eSurfTens != 0 and LconstProp = 1"
+                     << "\n  Call eddyTau not eddyTauCP by setting LconstProp = 0";
+        exit(0);
+    }
+    if(eSurfTens == 0.0 && LconstProp == 0) {
+        cout << endl << "************ WARNING: eSurfTens == 0 and LconstProp = 0"
+                     << "\n  If you want to simulate a multi phase case "
+                     << "eSurfTens should be unequal to zero.";
+    }
+
+    if(IetaType==2) 
+        ItableLookup = 1;
+    else 
+        ItableLookup = 0;
+
+    if(Lrxn && Ieta){
+        cout << endl << "ERROR, Ieta and Lrxn can't be true for the same case, choose either Lrxn or Ieta" << endl;
+        cout << endl << "If you think this is an error, you can change it in "
+                << __FILE__ << " at line # " << __LINE__ << endl;
+        cout << "Terminated......" << endl;
+
+        exit(0);
+    }
+    if(Lspatial && bcType!=3) {
+        cout << endl << "ERROR, Lspatial needs bcType=3         " << endl;
+        exit(0);
+    }
+    if(Lspatial && A_param!=0) {
+        cout << endl << "WARNING, A_param must = 0 for spatial cases, RESETTING IT TO ZERO" << endl;
+        A_param = 0;
+    }
+    if (Lspatial && Lprxn){
+        cout << "ERROR: Particle do not react spatially(Lspatial and Lprxn flags are set true)" << endl;
+        cout << endl << "If you think this is an error, you can change it in "
+                << __FILE__ << " at line # " << __LINE__ << endl;
+        cout << "Terminated......" << endl;
+
+        exit(0);
+    }
+
+    if(Lprxn && !Iparticles){
+        cout << endl << "ERROR: Particle reaction without particles" << endl;
+        cout << endl << "Terminated....." << endl;
+        exit(0);
+    }
+    if(Iradiation > 2 || Iradiation < 0){
+        cout << endl << "Unrecognized Iradiation flag --> " << Iradiation << endl;
+        cout << endl << "If you think this is an error, you can change it in "
+                << __FILE__ << " at line # " << __LINE__  << endl;
+        cout << endl << "Terminated......"  << endl;
+        exit(0);
+    }
+    if(Iradiation == 1 && Iparticles){
+        cout << endl << "WARNING:: Opthin radiation method might fail for particles.\n "
+                "SUGGESTION:: 2 Flux method" << endl;
+    }
+    else if(Iradiation && !(Lrxn || ItableLookup)){
+        cout << endl << "ERROR: If radiation flag is on, Lrxn should be on or ItableLookup should be on.\n"
+                "If you think this shouldn't be the case, you can change it in " << __FILE__ << " at line # " << __LINE__ << endl;
+        cout << endl << "Terminating out of the program." << endl;
+        exit(0);
+    } 
+
+    if(Ltwoway && !Iparticles) {
+        cout << endl << "WARNING: two-way coupling needs particle flag on" << endl;
+        exit(0);
+    }
+
+#ifndef DOCANTERA
+    if(Lrxn) {
+        cout << endl << "ERROR, Lrxn needs DOCANTERA flag" << endl;
+        exit(0);
+    }
+#endif
+
+    
+    if(ItableLookup && !Ieta){
+        cout << endl << "ERROR: Ieta flag must be set to true if ItableLookup flag is true" << endl;
+        cout << endl << "Terminating out of the program" << endl;
+        exit(0);
+    }
+
+    readBCinput(bcFile);
+
+    unnormalizeGridAndEddyDistParams();
+    
+    computeEddySizeDistParams();
+    computeLemRateParam();
+    
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+/** Input file values are normalized by domainLength, so get the domain specific values here.
+*/
+void odtParam::unnormalizeGridAndEddyDistParams() {
+
+    dxmin *= domainLength;
+    dxmax *= domainLength;
+    Lmax  *= domainLength;
+    Lmin  *= domainLength;
+    Lp    *= domainLength;
+
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+/** Reset the domain length, fixing dependend values
+ * @param domL \input domain length.
+ */
+void odtParam::resetDomainLength(double domL) {
+
+    dxmin = dxmin / domainLength * domL;
+    dxmax = dxmax / domainLength * domL;
+    Lmax  = Lmax  / domainLength * domL;
+    Lmin  = Lmin  / domainLength * domL;
+    Lp    = Lp    / domainLength * domL;
+
+    domainLength = domL;
+    computeEddySizeDistParams();
+
+}
+///////////////////////////////////////////////////////////////////////////////
+
+/** Compute paramameters used for the eddy size distribution. */
+void odtParam::computeEddySizeDistParams() {
+
+    esdp1 = Llem? 0.0 : (-2.0*Lp);
+    esdp2 = Llem? 0.0 :  (exp(-2.0*Lp/Lmax) - exp(-2.0*Lp/Lmin));
+    esdp3 = Llem? 0.0 : (exp(-2.0*Lp/Lmin));
+    esdp4 = Llem? 0.0 : (-esdp1 / esdp2);
+
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+/** Read the odt parameters input file. 
+ * @param fileName \input file to open (../input/odtParam.inp)
+ */
+
+void odtParam::readOdtParam(std::string fileName) {
+
+   // parse the input file
+   odtpInput_.setFile(fileName);
+
+   // grab values for each variable from input file
+   odtpInput_.getParameter("domainLength",   &domainLength,  2.0);
+   odtpInput_.getParameter("ngrd_0",         &ngrd_0,        200);
+   odtpInput_.getParameter("rho_0",          &rho_0,         1.0);
+   odtpInput_.getParameter("visc_0",         &visc_0,        0.00506);
+   odtpInput_.getParameter("lambda_0",       &lambda_0,      0.00506);
+   odtpInput_.getParameter("dPdx",           &dPdx,          -4.0);
+   odtpInput_.getParameter("phase",          &phase,         0.0);
+   odtpInput_.getParameter("grav",           &Grav,          9.81); // Gravity asigned with the odt line
+   
+   odtpInput_.getParameter("nOdtReals",      &nOdtReals,     1);
+   odtpInput_.getParameter("nStat",          &nStat,         2);
+   odtpInput_.getParameter("nTseg",          &nTseg,         1);
+   odtpInput_.getParameter("seed",           &seed,          22);
+   odtpInput_.getParameter("tEnd",           &tEnd,          400.0);
+   odtpInput_.getParameter("Pmax",           &Pmax,          0.4);
+   odtpInput_.getParameter("Pav",            &Pav,           0.02);
+   odtpInput_.getParameter("dtfac",          &dtfac,         2.0);
+   odtpInput_.getParameter("tdfac",          &tdfac,         1.0);
+   odtpInput_.getParameter("nDtSmeanWait",   &nDtSmeanWait   );
+
+   odtpInput_.getParameter("Z_param",        &Z_param,       600.0);
+   odtpInput_.getParameter("A_param",        &A_param,       0.6666667);
+   odtpInput_.getParameter("C_param",        &C_param,       10.0);
+   odtpInput_.getParameter("Lp",             &Lp,            0.015);
+   odtpInput_.getParameter("Lmax",           &Lmax,          1.0);
+   odtpInput_.getParameter("Lmin",           &Lmin,          0.004);
+   
+   odtpInput_.getParameter("chemMechFile",   &chemMechFile,  string("onestep.cti"));
+   odtpInput_.getParameter("restartOdtL",    &restartOdtL,   string("restart_odtl.dat"));
+   odtpInput_.getParameter("restartPart",    &restartPart,   string("restart_particles.dat"));
+   odtpInput_.getParameter("caseInp",        &caseInp,       string("odtl_scal_mixl_jet.inp"));
+   odtpInput_.getParameter("partInp",        &partInp,       string("particle.inp"));
+   odtpInput_.getParameter("tableInp",       &tableInp,      string("c2h2_table_mixf_hl_chi0.5.dat"));
+  
+   odtpInput_.getParameter("Lrxn",           &Lrxn,          false);
+   odtpInput_.getParameter("LimplicitChem",  &LimplicitChem, false);
+   odtpInput_.getParameter("Lstrang",        &Lstrang,       false);
+   odtpInput_.getParameter("LlimitMassFrac", &LlimitMassFrac,false);
+   odtpInput_.getParameter("LsecondOrder",   &LsecondOrder,  false);
+   odtpInput_.getParameter("LconstProp",     &LconstProp,    true);
+   odtpInput_.getParameter("diffCFL",        &diffCFL,       0.5);
+   odtpInput_.getParameter("Iparticles",     &Iparticles,    0);
+   odtpInput_.getParameter("Lprxn",          &Lprxn,         false);
+   odtpInput_.getParameter("Ltwoway",        &Ltwoway,       false); 
+   
+   odtpInput_.getParameter("odtPprobType",   &odtPprobType,  0);
+   
+   odtpInput_.getParameter("Lsubdomain",     &Lsubdomain,    false);
+   odtpInput_.getParameter("dtGatherSubdomains",     &dtGatherSubdomains,  0.00001);
+   odtpInput_.getParameter("numSubdomains",  &numSubdomains, 5);
+   
+   odtpInput_.getParameter("gDens",          &gDens,         40.);
+   odtpInput_.getParameter("dxmin/domain",   &dxmin,         0.0004);
+   odtpInput_.getParameter("dxmax/domain",   &dxmax,         0.2);
+   odtpInput_.getParameter("largeGradFrac",  &largeGradFrac, 0.2);
+   odtpInput_.getParameter("smallGradFrac",  &smallGradFrac, 0.01);
+   odtpInput_.getParameter("largeCurvFrac",  &largeCurvFrac, 0.2);
+   odtpInput_.getParameter("smallCurvFrac",  &smallCurvFrac, 0.01);
+
+   odtpInput_.getParameter("bcType",         &bcType,        0);
+   odtpInput_.getParameter("shiftMethod",    &shiftMethod,   0);
+
+   odtpInput_.getParameter("eddyMinCells",   &eddyMinCells,  5);
+   odtpInput_.getParameter("DAtimeFac",      &DAtimeFac,     10.0);
+   odtpInput_.getParameter("sLastDA",        &sLastDA,       100);
+
+   odtpInput_.getParameter("nsgrd",          &nsgrd,         1400);
+
+   odtpInput_.getParameter("Lrestart",       &Lrestart,      false);
+   odtpInput_.getParameter("LperiRestart",   &LperiRestart,  0);
+   odtpInput_.getParameter("LmultiPhase",    &LmultiPhase,   false);
+
+   odtpInput_.getParameter("modDump",        &modDump,       200);
+   odtpInput_.getParameter("modDisp",        &modDisp,       1);
+   odtpInput_.getParameter("modActv",        &modActv,       200);
+   odtpInput_.getParameter("Lbinary",        &Lbinary,       false);
+   
+   odtpInput_.getParameter("eSurfTens",      &eSurfTens,     0.00001);
+
+   odtpInput_.getParameter("LES_type",       &LES_type,      0);
+   odtpInput_.getParameter("Z_third",        &Z_third,      -1.0);
+   odtpInput_.getParameter("Lbuoyant",       &Lbuoyant,      false);
+   odtpInput_.getParameter("Lspatial",       &Lspatial,      false);
+   odtpInput_.getParameter("Iradiation",     &Iradiation,    0);
+
+   odtpInput_.getParameter("Imom",           &Imom,          0);
+   odtpInput_.getParameter("ImomType",       &ImomType,      0);
+   odtpInput_.getParameter("Ieta",           &Ieta,          0);
+   odtpInput_.getParameter("IetaType",       &IetaType,      0);
+
+   odtpInput_.getParameter("Iscl",           &Iscl,          0);
+
+   odtpInput_.getParameter("Llem",           &Llem,          false);
+   odtpInput_.getParameter("Dt",             &Dt,            0.000001);
+
+   odtpInput_.getParameter("Llaminar",       &Llaminar,      false);
+   odtpInput_.getParameter("Lfalko",         &Lfalko,        false);
+   odtpInput_.getParameter("LhasTemp",       &LhasTemp,      false);
+   //odtpInput_.getParameter("Lbouyant",       &Lbuoyant,      false);
+   //odtpInput_.getParameter("LdoubleDiff",    &LdoubleDiff,   false);
+   odtpInput_.getParameter("LheatedChannel", &LheatedChannel,false);
+   odtpInput_.getParameter("Ldebug",         &Ldebug,        false);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+
+/** Read the boundary conditions parameters input file. 
+ * @param fileName \input file to open (../input/odtParam.inp)
+ */
+void odtParam::readBCinput(std::string fileName) {
+    
+    std::vector<double> dummy;
+    // parse the input file
+    bcInput_.setFile(fileName);
+
+    // grab values for each variable from input file
+    bcInput_.getParameter("uBClo",    &uBClo,    0.0);    
+    bcInput_.getParameter("uBChi",    &uBChi,    0.0);    
+    bcInput_.getParameter("vBClo",    &vBClo,    0.0);    
+    bcInput_.getParameter("vBChi",    &vBChi,    0.0);    
+    bcInput_.getParameter("wBClo",    &wBClo,    0.0);    
+    bcInput_.getParameter("wBChi",    &wBChi,    0.0);    
+    bcInput_.getParameter("tempBClo", &tempBClo, 0.0);    
+    bcInput_.getParameter("tempBChi", &tempBChi, 0.0);    
+
+    
+    bcInput_.getParameter("nSclBClo",   &nSclBClo,  0);
+    if(nSclBClo > 0) bcInput_.getVector("nSclBClo",   &sclBClo);
+    bcInput_.getParameter("nSclBCChi",   &nSclBChi,  0);
+    if(nSclBChi > 0) bcInput_.getVector("nSclBChi",   &sclBChi);
+    bcInput_.getParameter("nFlxSclBClo",   &nFlxSclBClo,   0);
+    if(nFlxSclBClo > 0) bcInput_.getVector("nFlxSclBClo",   &flxSclBClo);
+    bcInput_.getParameter("nFlxSclBChi",   &nFlxSclBChi,  0);
+    if(nFlxSclBChi > 0) bcInput_.getVector("nFlxSclBChi",   &flxSclBChi);
+  
+
+    bcInput_.getParameter("nPjump",   &nPjump,   0);
+    if(nPjump > 0) bcInput_.getVector("nPjump",      &pJump );
+
+    bcInput_.getParameter("nInletYsp",   &nInletYsp,   0);
+    if(nInletYsp > 0) bcInput_.getVector("nInletYsp",     &inletYsp );
+    bcInput_.getParameter("inletTemp", &inletTemp,   298.15);
+    bcInput_.getParameter("inletEquRatio", &inletEquRatio,   0.6);
+    
+    bcInput_.getParameter("nInletFuel", &nInletFuel,   0);
+    if(nInletFuel > 0) {
+        bcInput_.getVector("nInletFuel",     &inletFuel );
+    }
+    bcInput_.getParameter("nInletOxidizer", &nInletOxidizer,   0);
+    if(nInletOxidizer > 0) {
+        bcInput_.getVector("nInletOxidizer",     &inletOxidizer );
+    }
+    
+    bcInput_.getParameter("nFreeStreamYsp",   &nFreeStreamYsp,   0);
+    if(nFreeStreamYsp > 0) bcInput_.getVector("nFreeStreamYsp",     &freeStreamYsp );
+    bcInput_.getParameter("freeStreamTemp", &freeStreamTemp, 298.15);
+
+    bcInput_.getParameter("shiftSpeed", &shiftSpeed, 0.0);
+    bcInput_.getParameter("nflameSpeedSpecies", &nflameSpeedSpecies, 0);
+    if(nflameSpeedSpecies > 0) bcInput_.getVector("flameSpeedSpecies", &dummy, &flameSpeedSpecies);
+    bcInput_.getParameter("specMassTarget", &specMassTarget, string("O2"));
+    bcInput_.getParameter("timeInpSwitch", &timeInpSwitch, 0);
+    bcInput_.getParameter("sinusFreq", &sinusFreq, 0.0);
+    bcInput_.getParameter("sinusAmpl", &sinusAmpl, 0.0);
+    
+    if(Lsubdomain && !Llem) cout << endl << "WARNING: Subdomain decomposition does not work with odt yet.";
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+/** compute lambda for lem. C. Schroedinger */ 
+void odtParam::computeLemRateParam(){
+
+    lemRateParam = Llem? (54./5. * Dt/(Lmax*Lmax*Lmax) * (pow(Lmax/Lmin,5./3.) - 1.)/(1.-pow(Lmin/Lmax,4./3.))) : 0.0;
+
+
+}

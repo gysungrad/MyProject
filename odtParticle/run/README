@@ -1,0 +1,6 @@
+
+Just run odt.x to go, or if you changed the code you can make then build with go.sh
+runLog is a sample output to screen redirected to runLog
+proc directory holds some scripts to process data from the run output
+
+For parallel jobs, output is in the RUNTIME directory

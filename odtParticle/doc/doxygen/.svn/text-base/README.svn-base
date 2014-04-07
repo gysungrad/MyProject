@@ -1,0 +1,4 @@
+
+To build the documentation go to ../../build and type "make doxygen"
+Open html/index.html for doxygen output
+

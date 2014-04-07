@@ -1,0 +1,66 @@
+0.60             (domainLength)  length of domain   0.2
+4000          (ngrd_0)        initial grid points 
+1.18           (rho_0)         initial uniform density 
+1.8E-5         (visc_0)        initial uniform viscosity
+-0.0           (dPdx)          initial pressure gradient 
+----------------------------------------------------------------------------------
+1              (nOdtReals)     number of odt realizations
+1              (nStat)         number of data averaging periods per realization
+1              (nTseg)         number of sub intervals per data avg period
+21             (seed)          random number generator seed (negative to randomize it)
+1.00             (tEnd)          ending time of realization
+0.4            (Pmax)          maximum eddy acceptance probability
+0.02           (Pav)           Average acceptance probability
+2.0            (dtfac)         maximum factor to increase dtSmean 
+100000         (nDtSmeanWait)  number of eddy samples before increase dtSmean
+----------------------------------------------------------------------------------
+400.          (Z_param)       Viscous penalty parameter 
+0.66666667     (A_param)       Energy Distribution parameter alpha 
+8.00          (C_param)       Eddy frequency parameter 
+0.015          (Lp)            Most probable eddy size frac of domainLength
+1.0            (Lmax)          Max eddy size frac of domainLength
+0.00005        (Lmin)          Min eddy size frac of domainLength
+----------------------------------------------------------------------------------
+onestep.xml    (chemMechFile)  name of chemical mechanism file
+0              (Lspatial)      flag turn on/off spatial formulation
+1              (Lrxn)          flag turn on/off combustion line (scaline)
+0              (Iradiation)    radiation flag: 0 is off, 1 is opthin, 2 is twoflux
+0              (Lbuoyant)      flag to turn on bouyancy
+1              (LimplicitChem) flag turn on/off implicit chemistry
+0              (LsecondOrder)  1 for second order time integration
+0              (LconstProp)    for Lcombustion=0, does const property odt
+0.5            (diffCFL)       multiplies min diffusion timestep
+0              (Imom)          flag for moments and number of particle moment equations
+0              (ImomType)      1 for default; 2 for soot; 3 for mineralization
+0              (Ieta)          flag for transported parameters, and number
+0              (IetaType)      1 for default; 2 for table lookup
+0              (LisAgua)       flag for aqueous systems
+0              (Lprxn)          flag for solid particle combustion
+10              (Iparticles)     flag for particles (# of particles)
+0               (Ltwoway)       flag for two-way coupling
+----------------------------------------------------------------------------------
+30             (gDens)         grid density for mesher
+0.00001     (dxmin/domain)  min grid spacing
+0.2            (dxmax/domain)  max grid spacing
+0.2            (largeGradFrac) fraction of maxDeltaPhi, split dphi larger: old mesher only
+0.01           (smallGradFrac) fraction of maxDeltaPhi, merge dphi smaller: old mesher only
+0.7            (largeCurvFrac) fraction of maxDelta theta, split cells larger: old mesher only
+0.3            (smallCurvFrac) fraction of maxDelta theta, merge cells  smaller: old mesher only
+----------------------------------------------------------------------------------
+3              (bcType)        1=periodic, 2=wall bounded, 3=outflow
+----------------------------------------------------------------------------------
+5              (eddyMinCells)  eddy must overlap at least this many cells
+10.0           (DAtimeFac)     time until catch-up adaption is DAtimeFac * dtCUmax
+100            (sLastDA)       size of the lastDA vector for timing adaptmesh after diff
+----------------------------------------------------------------------------------
+500            (nsgrd)        number of grid points on the stats grid
+----------------------------------------------------------------------------------
+0              (Lrestart)      1 to restart, 0 otherwise
+----------------------------------------------------------------------------------
+2000000        (modDump)       accepted eddies before output file
+1              (modDisp)       accepted eddies before display on screen
+5000000        (modActv)       accepted eddies before read active file 
+----------------------------------------------------------------------------------
+0.0            (eSurfTens)     surface tension, J/m2, for liquid phases
+2              (LES_type)      0 for no large eddy suppression; 1 for thirds; 2 for elapsed time; 3 for frac domain 4 for integral length scale
+0.8             (Z_third)       large eddy suppression (nonpositive prevents les test)

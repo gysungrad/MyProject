@@ -1,0 +1,25 @@
+ODT channel flow code verifications
+
+files:
+
+ankodt is from Niveditha's code with Alan's stats additions.  Run with the 12.73, 98 C, Z
+parameters, which were the old parameters from the vanilla odt.
+
+ankodt_retune is from the oct4 code in codes/odt/codeCheck, run with new params (10, 600 C Z)
+
+Bodt_Re395 is with 10, 600 C Z params with Alan's Basic odt code.  This is exactly the
+same as the provided code which was channel flow with Re_tau=590, but the viscosity was
+adjusted for the Re_tau = 395.
+
+Bodt_Re590 is code/data from Alans basic odt code with the 10, 600 C Z params
+
+dnsChannel* is from http://turbulence.ices.utexas.edu/MKM_1999.html
+
+dolodt_Re395_retune.  My original cases used 12.73, 98 C,Z and were poor (and similar to 
+nividitha's case (ankodt).  The retune was with C/2, Z*4, (6.365, 392) corresponding to
+multiplying the eddy energy in the tau expression by a factor of 0.25.  This matched the
+data well.
+
+dolodt_Re395_retune2 is with the 10, 600 C Z params
+
+uyplus.m processes the above data files by scaling for wall units.

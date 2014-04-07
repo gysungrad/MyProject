@@ -1,0 +1,66 @@
+
+The ODT code is built as:
+
+1. Edit the make.YOURMACHINE file for cantera paths and flags.
+2. make clean
+3. make depend
+4. make MACH=YOURMACHINE (use a default make.MYWORKSTATION or create your own).
+Note, you can edit the MACH variable at the top of the Makefile, then just type "make"
+
+Build documentation as:
+
+make doxygen
+
+OR
+
+"make MACH=MYWORKSTATION all" to do everything
+
+WITH CANTERA, BE SURE TO SET THE PATHS IN make.YOURMACHINE
+TO COMPILE WITHOUT CANTERA: set the CANTERA flag to NO in make.YOURMACHINE
+Also be sure to turn off relevant reaction flags in the odtParam.inp and other input files.
+
+---------------------------------------------------------------------------------
+
+Here are some instructions for building cantera on linux and mac.
+
+The ODT code is set up to work with Cantera 1.7, 1.8, and 2.1
+
+Cantera needs to be build for linking with C++.  The Matlab, Python, and Fortran interfaces
+are not needed.  A minimal python (cantera) build is needed for processing cti files.
+
+Basic instructions for 1.7, 1.8 (build from source):
+
+1. Make sure you have python installed.
+2. Download and untar Cantera (e.g. cantera-1.7.0).
+3. Edit the preconfig file.  Set the desired path to install, other flags.
+   You can use Cantera's included lapack/blas/cvode.  The ODT Makefile assumes this.
+4. Type "./preconfig"
+5. Type "make"
+6. Type "make install" (or "sudo make install" depending on the install location)
+7. The build puts a file called setup_cantera in the home directory.  This needs
+   to be sourced (source it in your .bashrc file) to set environment variables.
+   
+   In some cases the following two lines are needed at the bottom of the setup_cantera file:
+
+   PYTHONPATH=/home/you/codes/cantera/lib/python2.4/site-packages:$PYTHONPATH
+   export PYTHONPATH
+
+   (use the appropriate python package).
+
+8. In the make.MYWORKSTATION file, set the path to the Cantera include and lib files that
+   the Cantera installation created.
+
+Basic instructions for 2.1 (build from source):
+
+1. Make sure you have python installed.
+2. Get the code: http://code.google.com/p/cantera/source/checkout
+3. Edit the cantera.conf file with desired flags. 
+   (Backup the file and set flags in a cleaned cantera.conf file).  
+   As for older versions, you just need a minimal python_package, and can use
+   the cvode/lapack/blas that comes with Cantera.  The ODT Makefile assumes this.
+4. Type "scons install"
+5. add "source $HOME/canteraInstallDir/bin/setup_cantera" to your .bashrc file
+6. In the make.MYWORKSTATION file, set the path to the Cantera include and lib files that
+   the Cantera installation created.
+
+

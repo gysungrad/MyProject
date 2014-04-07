@@ -1,0 +1,13 @@
+2             (probType)            1 = mixing layer; 2 = jet
+-------------------------------------------------------------------------------------
+0.0004        (odtline_delta_mixf)  mixture fraction transition width
+-0.001        (odtline_fyc1)        1st transition pos (dist from cent) (jet or mixing layer)
+ 0.001        (odtline_fyc2)        2nd transition pos (jet only)
+-------------------------------------------------------------------------------------
+0.0004        (odtline_delta_vel)   velocity transition width
+-0.001        (odtline_vyc1)        1st transition pos (dist from cent) (jet or mixing layer)
+ 0.001        (odtline_vyc2)        2nd transition pos (jet only)
+44.0          (odtline_vel_diff)    velocity difference (m/s)
+0.0           (odtline_vel_min)     min velocity (m/s)
+
+

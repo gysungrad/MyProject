@@ -1,0 +1,97 @@
+/**
+ * @file eddy.h
+ * Header file for class eddy
+ */
+
+#ifndef EDDY_H
+#define EDDY_H
+
+#include <iostream>
+#include <vector>
+#include <fstream>
+#include "anyline.h"
+#include "odtline.h"
+#include "odtParam.h"
+#include "randomGenerator.h"
+#include "particles.h"
+
+using namespace std;
+
+///////////////////////////////////////////////////////////////////////////////
+
+/** An eddy class implementing all things eddy.  This includes triplet maps, 
+ *  eddy timescales, large eddy supression,
+ *  eddy acceptance, (or all things eddy).  Much of this happens on odt line segments
+ *  that are separate objects from the main lines.
+ *  
+ *  @author David O. Lignell
+ */ 
+
+class eddy {
+
+  ////////////////////// DATA MEMBERS /////////////////////
+
+    public:
+
+        double              leftEdge;           ///< left edge location of eddy
+        double              rightEdge;          ///< right edge location of eddy
+        double              invTauEddy;         ///< inverse eddy timescale 
+        double              eddySize;           ///< size of eddy
+        double              Pa;                 ///< eddy acceptance probability
+        bool                LperiodicEddy;      ///< a wrap-around eddy
+        bool                LmultiPhaseEddy;    ///< 
+        vector<double>      cCoef;              ///< coefficient of K kernel
+        vector<double>      bCoef;              ///< coefficient of J kernel
+        vector<double>      K;                  ///< eddy kernel K
+
+        vector<double>      vEddy;              ///< v eddy velocity
+        double              uEddy;              ///< u eddy velocity
+        double              wEddy;              ///< w eddy velocity
+        double              eddyLife;
+
+#ifdef COMPSCI
+        vector<double>      eddyTauDy;          ///< used by eddyTauCP
+#endif
+
+        ////////////////////// MEMBER FUNCTIONS  /////////////////////
+
+        void   tripMap(anyline &anyl);
+        bool   eddyTau(odtline &line, const odtParam &odtP, double Z_value);
+        bool   eddyTauCP(odtline &line, const odtParam &odtP, double Z_value);
+        void   sampleEddySize(const odtParam &odtP, randomGenerator &rr);                 
+        void   sampleEddyPosition(const odtParam &odtP, anyline &line, randomGenerator &rr);
+        void   computeEddyAcceptanceProb(const odtParam &odtP, double &dtSample);
+        void   applyVelocityKernels(odtline &line, const odtParam &odtP);
+        void   fillKernel(anyline &line); 
+        double eddyFavreAvgVelocity(odtline &line);
+
+        //----------- for particles
+
+        void   tripletMapParticles(const odtParam &odtP, odtline &line, odtline &eddyLine, particles &part, double eddyStartTime);
+
+    private : 
+
+        void   getEddyVvel_TMtracers(const odtParam &odtP, odtline &line, odtline &eddyLine, particles &part);
+        void   getEddyUWvel(odtline &line);
+        //---- helper functions for getParticleUVWYafterEddy
+        double X1(double Euvel, double Guvel, double Puvel, double Tau, double f, double AGx, double T);
+        double X2(double Euvel, double Guvel, double Puvel, double Tau, double f, double AGx, double T); 
+        double derX(double Euvel, double Guvel, double Puvel, double Tau, double f, double AGx, double T);
+        double Y1(double PyPos, double Pvvel, double velEd, double Tau, double f, double AGy, double T);
+        double Y2(double PyPos, double Pvvel, double velEd, double Tau, double f, double AGy, double T);
+        double derY(double Pvvel, double velEd, double Tau, double f, double AGy, double T);
+        double Z1(double Ewvel, double Gwvel, double Pwvel, double Tau, double f, double AGz, double T);
+        double Z2(double Ewvel, double Gwvel, double Pwvel, double Tau, double f, double AGz, double T);
+        double derZ(double Ewvel, double Gwvel, double Pwvel, double Tau, double f, double AGz, double T);
+
+        ////////////////////// CONSTRUCTOR FUNCTIONS  /////////////////////
+
+    public :
+
+        eddy();                    // constructor
+        eddy(const eddy &ed);      // copy constructor subset
+        ~eddy() {}                 // destructor
+
+};
+
+#endif

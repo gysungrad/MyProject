@@ -1,0 +1,125 @@
+K 25
+svn:wc:ra_dav:version-url
+V 50
+/svn/odtame-odt/!svn/ver/10/trunk/odt/source/cvode
+END
+sundials_smalldense.h
+K 25
+svn:wc:ra_dav:version-url
+V 71
+/svn/odtame-odt/!svn/ver/2/trunk/odt/source/cvode/sundials_smalldense.h
+END
+sundials_math.h
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/svn/odtame-odt/!svn/ver/2/trunk/odt/source/cvode/sundials_math.h
+END
+sundials_dense.c
+K 25
+svn:wc:ra_dav:version-url
+V 66
+/svn/odtame-odt/!svn/ver/2/trunk/odt/source/cvode/sundials_dense.c
+END
+cvode.c
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/svn/odtame-odt/!svn/ver/2/trunk/odt/source/cvode/cvode.c
+END
+cvode_dense_impl.h
+K 25
+svn:wc:ra_dav:version-url
+V 68
+/svn/odtame-odt/!svn/ver/2/trunk/odt/source/cvode/cvode_dense_impl.h
+END
+sundials_dense.h
+K 25
+svn:wc:ra_dav:version-url
+V 66
+/svn/odtame-odt/!svn/ver/2/trunk/odt/source/cvode/sundials_dense.h
+END
+cvode.h
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/svn/odtame-odt/!svn/ver/2/trunk/odt/source/cvode/cvode.h
+END
+sundials_types.h
+K 25
+svn:wc:ra_dav:version-url
+V 66
+/svn/odtame-odt/!svn/ver/2/trunk/odt/source/cvode/sundials_types.h
+END
+sundials_config.h
+K 25
+svn:wc:ra_dav:version-url
+V 67
+/svn/odtame-odt/!svn/ver/2/trunk/odt/source/cvode/sundials_config.h
+END
+cvode_dense.c
+K 25
+svn:wc:ra_dav:version-url
+V 63
+/svn/odtame-odt/!svn/ver/2/trunk/odt/source/cvode/cvode_dense.c
+END
+nvector_serial.c
+K 25
+svn:wc:ra_dav:version-url
+V 66
+/svn/odtame-odt/!svn/ver/2/trunk/odt/source/cvode/nvector_serial.c
+END
+sundials_nvector.c
+K 25
+svn:wc:ra_dav:version-url
+V 68
+/svn/odtame-odt/!svn/ver/2/trunk/odt/source/cvode/sundials_nvector.c
+END
+cvode_dense.h
+K 25
+svn:wc:ra_dav:version-url
+V 63
+/svn/odtame-odt/!svn/ver/2/trunk/odt/source/cvode/cvode_dense.h
+END
+THIS_IS_CVODE_2.5.0
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/svn/odtame-odt/!svn/ver/10/trunk/odt/source/cvode/THIS_IS_CVODE_2.5.0
+END
+nvector_serial.h
+K 25
+svn:wc:ra_dav:version-url
+V 66
+/svn/odtame-odt/!svn/ver/2/trunk/odt/source/cvode/nvector_serial.h
+END
+cvode_impl.h
+K 25
+svn:wc:ra_dav:version-url
+V 62
+/svn/odtame-odt/!svn/ver/2/trunk/odt/source/cvode/cvode_impl.h
+END
+cvode_io.c
+K 25
+svn:wc:ra_dav:version-url
+V 60
+/svn/odtame-odt/!svn/ver/2/trunk/odt/source/cvode/cvode_io.c
+END
+sundials_nvector.h
+K 25
+svn:wc:ra_dav:version-url
+V 68
+/svn/odtame-odt/!svn/ver/2/trunk/odt/source/cvode/sundials_nvector.h
+END
+sundials_smalldense.c
+K 25
+svn:wc:ra_dav:version-url
+V 71
+/svn/odtame-odt/!svn/ver/2/trunk/odt/source/cvode/sundials_smalldense.c
+END
+sundials_math.c
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/svn/odtame-odt/!svn/ver/2/trunk/odt/source/cvode/sundials_math.c
+END

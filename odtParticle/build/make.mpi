@@ -1,0 +1,25 @@
+######################## COMPILATION ###########################
+# set CHEMISTRY to ONESTEP or USUAL (see Makefile SOURCE section)
+# set CANTERA to 1.7 or 1.8 or 2.1 or NO or blank
+# set MTWIST to YES or NO
+# set PARALLEL to YES or NO
+# set OLDMESHER to YES or NO
+
+CHEMISTRY   = ONESTEP
+CANTERA     = 1.8
+MTWIST      = YES
+PARALLEL    = YES
+OLDMESHER   = NO
+
+options      =  -O3 
+#options      =  -g -Wall 
+
+CC_COMPILER_NAME = mpic++
+C_COMPILER_NAME  = mpicc
+
+######################## DIRECTORIES ###########################
+# set your cantera library path if using cantera
+
+CANT_LIB = /fslhome/gysun/fsl_groups/fslg_crfrg/compute/SUN/Cantera/lib/
+CANT_INC = /fslhome/gysun/fsl_groups/fslg_crfrg/compute/SUN/Cantera/include/cantera/
+

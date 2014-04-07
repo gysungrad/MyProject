@@ -1,0 +1,12 @@
+
+Homogeneous turbulence decay.
+
+Go to getRestartFile and run Matlab code oneDhomoTurb.m, then copy the restart_odtl.dat to this directory.
+
+Copy the contents of this directory to the input directory (don't need to copy the getRestartFile dir.)
+
+Note, make sure your domain length in odtParam.inp matches the restart file.  Make sure your smallest 
+grid cell in odtParam.inp (dxmin) is smaller than eta (Kolmogorov length).  dxmin is scaled by the domain size,
+so you will want dxmin < eta/Ldomain.  Set tend to be some multiple of the integral time scale.  The oneDhomoTurb.m
+file outputs a lot of useful parameters.
+

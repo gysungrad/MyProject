@@ -1,0 +1,35 @@
+-------------------- Dirichlet conditions (not used for periodic bc)
+0.0            (uBClo)         lower u boundary
+0.0            (uBChi)         upper u boundary
+0.0            (vBClo)         lower v boundary
+0.0            (vBChi)         upper v boundary
+0.0            (wBClo)         upper w boundary
+0.0            (wBChi)         lower w boundary
+-------------------- Inlet Properties (if applicable)
+5              (nInletYsp)        size of inletYsp vector 
+vector nInletYsp begin
+0.000000001    O2
+0.999999999    C2H4
+0              CO2
+0              H2O
+0              N2  
+vector nInletYsp end
+298.15         (inletTemp)     inlet 
+-------------------- Free Stream  Properties (if applicable)
+5              (nFreeStreamYsp)   size of freeStreamYsp vector
+vector nFreeStreamYsp begin
+0.2329         O2
+0.0            C2H4
+0              CO2
+0              H2O
+0.7671         N2  
+vector nFreeStreaminletYsp end
+298.15         (freeStreamTemp) outlet
+-------------------- Periodic jumps
+3              (nPjump)        size of pJump vector (= anyline::nprops)
+vector nPjump begin
+0              u 
+0              v
+0              w
+vector nPjump end
+

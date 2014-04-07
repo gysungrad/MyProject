@@ -1,0 +1,17 @@
+MOLE                  (moleOrMass)    MOLE or MASS: corresponding compositions below
+--------------------- 
+101325.0              (pres)          pressure (Pa)
+--------------------- (oxidizer)      stream f=0
+298.15                (T0)            temperature (K)
+0                     (composition0)   composition of stream 0 (oxidizer)
+vector composition0 start
+0.21                  (O2)
+0.79                  (N2)
+vector composition0 end
+--------------------- (fuel)          stream f=1
+298.15                (T1)            temperature (K)
+1                     (composition1)   composition of stream 1 (fuel)
+vector composition1 start
+1.0                   (C2H4)
+vector composition1 end
+
