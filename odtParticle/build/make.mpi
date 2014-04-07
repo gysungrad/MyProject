@@ -4,22 +4,65 @@
 # set MTWIST to YES or NO
 # set PARALLEL to YES or NO
 # set OLDMESHER to YES or NO
+# set COMPSCI to YES or NO    ! speed up by computer scientists from BTU Cottbus
+# set IMPLICIT to YES or NO
+# set NETCDF to YES or NO     ! currently not working
+# set NEWSTATS to NO, YES, HIGH, FULL or FUHI
+# set DEBUG to YES or NO      ! an optional flag for
 
 CHEMISTRY   = ONESTEP
-CANTERA     = 1.8
+CANTERA     = NO
 MTWIST      = YES
 PARALLEL    = YES
 OLDMESHER   = NO
+COMPSCI     = NO
+IMPLICIT    = NO
+NETCDF      = NO
+NEWSTATS    = NO
+DEBUG       = NO
 
-options      =  -O3 
-#options      =  -g -Wall 
 
-CC_COMPILER_NAME = mpic++
-C_COMPILER_NAME  = mpicc
+####################   COMPILER OPTIONS   #####################################
 
-######################## DIRECTORIES ###########################
+options       =  -g -Wall
+options       =  -O3
+#options       =  -O3 -g -Wall
+#options      +=  -framework Accelerate
+
+ext_libs      = -lblas -llapack
+#ext_libs      = -lctlapack -lctblas
+
+
+#####################   COMPILER   ############################################
+
+ifeq ($(PARALLEL), YES)
+    CC_COMPILER_NAME = mpic++
+    C_COMPILER_NAME  = mpicc
+else
+    CC_COMPILER_NAME = g++
+    C_COMPILER_NAME  = gcc
+    #CC_COMPILER_NAME = icc
+    #C_COMPILER_NAME = icc
+endif
+
+
+#####################   DIRECTORIES   #########################################
 # set your cantera library path if using cantera
 
-CANT_LIB = /fslhome/gysun/fsl_groups/fslg_crfrg/compute/SUN/Cantera/lib/
-CANT_INC = /fslhome/gysun/fsl_groups/fslg_crfrg/compute/SUN/Cantera/include/cantera/
+ifneq ($(CANTERA), NO)
+    #CANT_LIB = /Users/dol4/codes/cantera18/lib/
+    #CANT_INC = /Users/dol4/codes/cantera18/include/cantera/
+    
+    CANT_LIB = /Users/dol4/codes/cantera21/lib/
+    CANT_INC = /Users/dol4/codes/cantera21/include/cantera/ -I/Users/dol4/codes/cantera21/include/
+endif
+
+ifeq ($(NETCDF), YES)
+    NET_PATH = ~/programming/NetCDF/netcdf/
+endif
+
+ifeq ($(PARALLEL), YES)
+    #MPI_PATH = ~/programming/MPI/openmpi/
+endif
+
 

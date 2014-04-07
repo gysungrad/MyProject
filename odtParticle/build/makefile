@@ -1,62 +1,115 @@
 
-ifndef $(MACH) 
-	#MACH=MYWORKSTATION
-	#MACH=MAC
-	MACH=mpi
+# DEFAULT
+ifndef $(MACH)
+       #MACH=MYWORKSTATION
+	   MACH=MAC
 endif
 
 include make.$(MACH)
 
-######################## DIRECTORIES ###########################
+####################   DIRECTORIES   ##########################################
 
 SRCDIR       = ../source/
 CVODE_SRCDIR = ../source/cvode/
 PROG         = ../run/odt.x
 
-######################## COMPILATION ###########################
 
-includes = -I$(CANT_INC)
-libs     = -L$(CANT_LIB)
+####################   COMPILATION   ##########################################
 
+# IMPORTANT  !!!
+# this part depends on the used machine and, therefore, is moved to the make.* files
+#
+#ext_libs =
+#includes =
+#libs     =
+#
+#ifeq ($(MACH), MYWORKSTATION)
+#    ext_libs = -lblas -llapack
+#else
+#    ext_libs = -lblas -llapack ### SET DEFAULT
+#endif
+##ifeq ($(MACH), MAC)
+##    ext_libs = -lctlapack -lctblas
+##endif
+#ifeq ($(MACH), MPI)
+#    ext_libs = -lblas -llapack
+#endif
+
+
+####################   Cantera flags   ##########------------------------------
 ifeq ($(CANTERA), 1.7)
-    D1 = -DDOCANTERA
-    ext_libs =  -luser -loneD -lzeroD -ltransport -lcantera -lcvode \
-                -lctmath -ltpx -lctf2c -lconverters -lctcxx 
+    D1        = -DDOCANTERA
+    ext_libs += -luser -loneD -lzeroD -ltransport -lcantera -lcvode \
+                -lctmath -ltpx -lctf2c -lconverters -lctcxx
+    includes += -I$(CANT_INC)
+    libs     += -L$(CANT_LIB)
 endif
 ifeq ($(CANTERA), 1.8)
-    D1 = -DDOCANTERA -DCANTERA18
-    ext_libs = -luser -loneD -lzeroD -lequil -lkinetics -ltransport -lthermo \
-               -lctnumerics -lctmath -ltpx -lctspectra -lconverters -lctbase -lctcxx \
-               -lcvode -lctf2c -lctf2c -lm 
+    D1        = -DDOCANTERA -DCANTERA18
+    ext_libs += -luser -loneD -lzeroD -lequil -lkinetics -ltransport -lthermo \
+                -lctnumerics -lctmath -ltpx -lctspectra -lconverters -lctbase -lctcxx \
+                -lcvode -lctf2c -lctf2c -lm
+    includes += -I$(CANT_INC)
+    libs     += -L$(CANT_LIB)
 endif
-ifneq ($(MACH), MAC)
-    ext_libs += -lctlapack -lctblas
-endif
-
 ifeq ($(CANTERA), 2.1)
-    D1 = -DDOCANTERA -DCANTERA21
-    ext_libs = 
-    ext_libs = -lcantera
+    D1        = -DDOCANTERA -DCANTERA21
+    ext_libs += 
+    ext_libs += -lcantera
+    includes += -I$(CANT_INC)
+    libs     += -L$(CANT_LIB)
 endif
 
-
+####################   other flags   ############------------------------------
 ifneq ($(CHEMISTRY), USUAL)
-    D2 = -DPROBLEMSPECIFICRR
+    D2        = -DPROBLEMSPECIFICRR
 endif
-
 ifeq ($(MTWIST), YES)
-    D3 = -DDOMTRAND
+    D3        = -DDOMTRAND
 endif
 ifeq ($(PARALLEL), YES)
-    D4 = -DDOMPI
+    D4        = -DDOMPI
+    includes += -I$(MPI_PATH)include/
+    libs     += -L$(MPI_PATH)lib/
 endif
 ifeq ($(OLDMESHER), YES)
-    D5 = -DOLDMESHER
+    D5        = -DOLDMESHER
+endif
+ifeq ($(COMPSCI), YES)
+    D6        = -DCOMPSCI
+endif
+ifeq ($(IMPLICIT), YES)
+    D7        = -DIMPLICIT
+endif
+ifeq ($(NETCDF), YES)
+    ext_libs += -lnetcdf_c++
+    includes += -I$(NET_PATH)include/
+    libs     += -L$(NET_PATH)lib/
+    D8        = -DNETCDF
+endif
+ifeq ($(NEWSTATS), YES)
+    D9        = -DNEWSTATS
+endif
+ifeq ($(NEWSTATS), FULL)
+    D9        = -DNEWSTATS -DNEWSTATSF
+endif
+ifeq ($(NEWSTATS), HIGH)
+    D9        = -DNEWSTATS -DNEWSTATSH
+endif
+ifeq ($(NEWSTATS), FUHI)
+    D9        = -DNEWSTATS -DNEWSTATSF -DNEWSTATSH
+endif
+ifeq ($(DEBUG), YES)
+    D10        = -DDEBUG
+endif
+ifeq ($(BOOST), YES)
+    D11        = -DBOOST
 endif
 
-DIRECTIVES = $(D1) $(D2) $(D3) $(D4) $(D5)
+DIRECTIVES = $(D1) $(D2) $(D3) $(D4) $(D5) $(D6) $(D7) $(D8) $(D9) $(D10) $(D11)
 
-COMPCC   = $(CC_COMPILER_NAME) $(includes) $(options) $(DIRECTIVES) -c 
+
+COMPCC   = $(CC_COMPILER_NAME) $(includes) $(options) $(DIRECTIVES) -c  
 COMPC    = $(C_COMPILER_NAME)  $(includes) $(options) $(DIRECTIVES) -c 
 
 COMPDEP  = $(CC_COMPILER_NAME) $(includes) $(options) $(DIRECTIVES)  -MM -MT
